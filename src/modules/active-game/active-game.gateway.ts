@@ -1,5 +1,4 @@
 import type { IncomingMessage } from 'node:http'
-import { Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import {
   ConnectedSocket,
@@ -61,7 +60,6 @@ const parseBody = <T extends object>(cls: new () => T, body: unknown): T => {
 
 @WebSocketGateway({ path: '/ws', maxPayload: 16384 })
 export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
-  private readonly logger = new Logger(ActiveGameGateway.name)
   private heartbeat?: NodeJS.Timeout
 
   @WebSocketServer()
@@ -167,7 +165,7 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
     this.run(client, () => this.activeGame.endGame(client))
   }
 
-  private run(client: WebSocket, fn: () => void | Promise<unknown>): void {
+  private run(client: WebSocket, fn: () => unknown): void {
     Promise.resolve()
       .then(fn)
       .catch((error) => this.activeGame.sendFault(client, error))

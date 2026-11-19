@@ -1,5 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
-import { ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common'
+import { createHash, randomBytes } from 'node:crypto'
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { User } from '@prisma/client'
 import type { AppConfig } from '../../config/configuration'
@@ -17,7 +17,6 @@ const hashToken = (token: string): string => createHash('sha256').update(token).
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name)
   private readonly tickets = new Map<string, { userId: string; expiresAt: number }>()
 
   constructor(

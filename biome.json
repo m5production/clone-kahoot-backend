@@ -22,6 +22,17 @@
     "enabled": true,
     "actions": { "source": { "organizeImports": "off" } }
   },
+  "overrides": [
+    {
+      "includes": ["test/**/*.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noExplicitAny": "off" },
+          "style": { "noNonNullAssertion": "off" }
+        }
+      }
+    }
+  ],
   "javascript": {
     "parser": { "unsafeParameterDecoratorsEnabled": true },
     "formatter": {

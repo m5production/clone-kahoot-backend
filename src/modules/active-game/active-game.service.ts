@@ -71,8 +71,9 @@ export class ActiveGameService {
       this.endRoom(meta.roomId)
       return
     }
-    const player = info ? room.players.get(info.userId) : undefined
-    if (player && ![...room.sockets.values()].some((s) => s.userId === info!.userId)) {
+    const userId = info?.userId
+    const player = userId ? room.players.get(userId) : undefined
+    if (player && ![...room.sockets.values()].some((s) => s.userId === userId)) {
       player.connected = false
     }
     this.broadcastGameData(room)

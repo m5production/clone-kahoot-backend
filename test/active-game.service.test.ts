@@ -98,6 +98,7 @@ test('player joins, answers once, host disconnect ends the room', async () => {
 
   player.clear()
   service.answerQuestion(player as unknown as WebSocket, 'q1', 'yes')
+  // biome-ignore lint/complexity/useLiteralKeys: reaching into private state to verify stored answers
   const stored = service['rooms'].get('game-1')!.players.get('player-1')!
   assert.equal(stored.answers[0].isCorrect, true)
 
