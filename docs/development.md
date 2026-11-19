@@ -2,7 +2,7 @@
 
 ## Требования
 
-- Node.js 22+, Yarn 1.22 (`npx yarn@1.22.22`).
+- Node.js 26+, Yarn 1.22 (`npx yarn@1.22.22`).
 - Docker (PostgreSQL) или внешний PostgreSQL.
 
 ## Запуск с нуля

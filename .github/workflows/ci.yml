@@ -36,8 +36,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 26
           cache: yarn
+
+      - name: Install yarn (node 26 ships neither yarn nor corepack)
+        run: npm install -g yarn@1.22.22
 
       - name: Install dependencies
         run: yarn install --frozen-lockfile
