@@ -23,6 +23,19 @@ const bool = (value: string | undefined, fallback: boolean): boolean => {
   throw new Error(`Expected 'true' or 'false', got: ${value}`)
 }
 
+const resolveDatabaseUrl = (env: NodeJS.ProcessEnv): string => {
+  const host = required(env, 'DB_HOST').trim()
+  const user = required(env, 'DB_USER')
+  const password = required(env, 'DB_PASSWORD')
+  const name = required(env, 'DB_NAME')
+  const port = int(env.DB_PORT ?? '5432', 'DB_PORT')
+  const sslmode = env.DB_SSLMODE?.trim()
+
+  const credentials = `${encodeURIComponent(user)}:${encodeURIComponent(password)}`
+  const database = encodeURIComponent(name)
+  return `postgresql://${credentials}@${host}:${port}/${database}${sslmode ? `?sslmode=${encodeURIComponent(sslmode)}` : ''}`
+}
+
 export interface AppConfig {
   nodeEnv: 'development' | 'test' | 'production'
   host: string
@@ -43,10 +56,7 @@ export const appConfig = registerAs('app', (): AppConfig => {
     throw new Error(`NODE_ENV must be development, test or production, got: ${nodeEnv}`)
   }
 
-  const databaseUrl = required(env, 'DATABASE_URL')
-  if (!databaseUrl.startsWith('postgres')) {
-    throw new Error('DATABASE_URL must be a PostgreSQL connection string')
-  }
+  const databaseUrl = resolveDatabaseUrl(env)
 
   const allowedOrigins = required(env, 'ALLOWED_ORIGINS')
     .split(',')

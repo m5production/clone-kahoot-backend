@@ -10,7 +10,12 @@ runner (non-root `app`, только `node_modules`, `.prisma`, `prisma/`, `dist
 docker build -t clone-kahoot-backend .
 docker run -p 3000:3000 \
   -e NODE_ENV=production \
-  -e DATABASE_URL=postgresql://... \
+  -e DB_HOST=postgres \
+  -e DB_PORT=5432 \
+  -e DB_USER=postgres \
+  -e DB_PASSWORD=... \
+  -e DB_NAME=clone_kahoot \
+  -e DB_SSLMODE=require \
   -e ALLOWED_ORIGINS=https://your-frontend.example \
   clone-kahoot-backend
 ```
@@ -21,7 +26,8 @@ SIGTERM → graceful shutdown (таймаут 10 с в `main.ts`).
 ## Amvera
 
 - `amvera.yml` — конфигурация площадки (сборка из Dockerfile).
-- Production-переменные — через секреты площадки: `DATABASE_URL`,
+- Production-переменные — через секреты площадки: `DB_HOST`, `DB_PORT`,
+  `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`,
   `ALLOWED_ORIGINS=https://dimetriyo.github.io`, `TRUST_PROXY=true`
   (за прокси), `NODE_ENV=production`.
 - Миграции: `yarn prisma-migrate-prod` (`migrate deploy`) — отдельным шагом,

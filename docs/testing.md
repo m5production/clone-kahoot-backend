@@ -11,8 +11,8 @@
 
 - Интеграционные проверки — только против **PostgreSQL**, никогда SQLite.
 - E2E-процесс: Playwright поднимает собранный бэкенд (`npx tsc && node dist/main.js`,
-  порт 3101, `NODE_ENV=test`, `DATABASE_URL` из `E2E_DATABASE_URL` или
-  `postgresql://postgres:postgres@localhost:5432/clone_kahoot_e2e`) и Vite :5174.
+  порт 3101, `NODE_ENV=test`, `DB_*` из `E2E_DB_*` или локальный
+  `postgres:postgres@localhost:5432/clone_kahoot_e2e`) и Vite :5174.
   БД сбрасывается `migrate reset` каждым запуском — не направлять на рабочую БД.
 - `NODE_ENV=test` отключает in-memory rate limit (много регистраций с одного IP).
 - Не запускать src через `tsx` — DI не работает без decorator metadata;

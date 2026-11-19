@@ -42,7 +42,10 @@ OpenAPI UI: `http://localhost:3000/api/docs` (dev), схема — `/api/openapi
 | --- | --- | --- |
 | `NODE_ENV` | development | development \| test \| production |
 | `HOST` / `PORT` | 0.0.0.0 / 3000 | bind |
-| `DATABASE_URL` | — (required) | PostgreSQL DSN |
+| `DB_HOST` | — (required) | PostgreSQL host |
+| `DB_PORT` | 5432 | PostgreSQL port |
+| `DB_USER` / `DB_PASSWORD` / `DB_NAME` | — (required) | PostgreSQL credentials and database |
+| `DB_SSLMODE` | — | Optional PostgreSQL `sslmode` |
 | `ALLOWED_ORIGINS` | — (required) | CORS + Origin для WS, через запятую |
 | `TRUST_PROXY` | production: true | `trust proxy` за reverse proxy |
 | `SESSION_TTL_SECONDS` | 604800 | TTL сессии (7 дней) |

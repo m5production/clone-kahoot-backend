@@ -14,7 +14,7 @@ RUN npm install -g yarn@1.22.22
 COPY package.json yarn.lock tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY prisma ./prisma
 COPY src ./src
-RUN yarn prisma generate && yarn build
+RUN DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder yarn prisma generate && yarn build
 
 FROM base AS runner
 WORKDIR /app
