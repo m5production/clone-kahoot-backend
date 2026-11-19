@@ -1,0 +1,44 @@
+# HTTP API
+
+Базовый префикс `/api`. Авторизация — `Authorization: Bearer <token>`
+(см. [authentication.md](authentication.md)).
+
+## OpenAPI
+
+- Схема: `GET /api/openapi.json` (всегда).
+- UI: `/api/docs` — только не-production.
+- Генерируется `SwaggerModule` из контроллеров и DTO (плагин `@nestjs/swagger`
+  в `nest-cli.json`). Ручное дублирование схем в документации не ведётся.
+
+## Маршруты
+
+| Метод | Путь | Доступ | Назначение |
+| --- | --- | --- | --- |
+| POST | `/users` | публичный | регистрация → `{id,name,token}` |
+| POST | `/users/auth` | публичный | вход → `{id,name,token}` |
+| GET | `/users/me` | Bearer | текущий пользователь |
+| POST | `/users/logout` | Bearer | отзыв сессии → 204 |
+| POST | `/auth/ws-ticket` | Bearer | одноразовый WS-билет |
+| GET/PUT/DELETE | `/users/:id` | Bearer/публичный GET | профиль; изменения — только свои |
+| GET/POST | `/games` | Bearer | список и создание своих квизов |
+| GET/DELETE | `/games/:id` | Bearer | только владелец |
+| GET/POST | `/questions(?gameId=)` | Bearer | список по игре, создание (order вычисляется) |
+| GET/PUT/DELETE | `/questions/:id` | Bearer | только владелец игры |
+| GET/POST/PUT/DELETE | `/accepted-answers(?questionId=)` | Bearer | ответы вопроса; PUT — транзакционная замена `[{text}]` |
+| GET | `/active-game/:id` | Bearer | запущена ли комната |
+| GET | `/health/live` `/health/ready` | публичный | probes |
+
+## Ошибки
+
+Все ошибки — `{code, message, requestId}`; `requestId` возвращается и в
+заголовке `x-request-id`. Типовые коды: `UNAUTHORIZED`, `FORBIDDEN`,
+`NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT`, `TOO_MANY_REQUESTS`,
+`INTERNAL_ERROR`.
+
+## Отличия от старого Express-API (намеренные)
+
+- Регистрация/вход возвращают `token`; cookie `authorization` больше нет.
+- `GET /users/:id` не создаёт сессию.
+- Создание игры/вопросов/ответов требует Bearer; владелец из сессии.
+- `AcceptedAnswer` в body — только `{text}`; `questionId` — query-параметр.
+- `Question` имеет `order`.

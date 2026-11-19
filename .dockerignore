@@ -4,3 +4,7 @@ dist
 Dockerfile
 .dockerignore
 .qodo
+.env*
+test
+docs
+docker-compose.yml

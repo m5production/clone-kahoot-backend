@@ -1,36 +1,28 @@
 FROM node:22-alpine AS base
 
-# Установка зависимостей
 FROM base AS deps
 WORKDIR /app
-COPY package.json yarn.lock .env.production ./
-RUN yarn install --frozen-lockfile
+COPY package.json yarn.lock ./
+RUN yarn install --frozen-lockfile --production=false
 
-# Сборка приложения
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY package.json yarn.lock tsconfig.json ./
 COPY prisma ./prisma
+COPY src ./src
+RUN yarn prisma generate && yarn build
 
-
-# Генерация Prisma Client
-RUN yarn prisma generate --schema=./prisma/schema.prisma
-
-# Компиляция TypeScript
-RUN yarn build
-
-# Финальный production-образ
 FROM base AS runner
 WORKDIR /app
-
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/prisma ./prisma
+ENV NODE_ENV=production
+RUN addgroup -S app && adduser -S app -G app
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/dist ./dist
-COPY --from=deps /app/.env.production /app/package.json ./
-
+COPY package.json ./
+USER app
 EXPOSE 3000
 
-CMD ["yarn", "start"]
+CMD ["node", "dist/main.js"]
