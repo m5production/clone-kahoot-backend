@@ -1,5 +1,8 @@
 .qodo
 .env
+.env.*
+!.env.development
+!.env.example
 node_modules
 dist
 generated
