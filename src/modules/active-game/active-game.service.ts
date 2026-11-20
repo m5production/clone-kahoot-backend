@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common'
 import type { WebSocket } from 'ws'
+import { normalizeAnswer } from '../../common/normalize-answer'
 import { PrismaService } from '../../database/prisma.service'
 
 export const GAME_COLORS = ['red', 'orange', 'blue', 'green', 'purple', 'pink']
@@ -112,7 +113,11 @@ export class ActiveGameService {
       hostSocket: socket,
       hostUserId: meta.userId,
       questions: questions.map(({ id, text, img }) => ({ id, text, img })),
-      acceptedAnswers: new Map(questions.map((q) => [q.id, new Set(q.answers.map((a) => a.text))])),
+      // BR-64: accepted answers are stored normalized so casing/outer
+      // whitespace of a player's answer does not matter
+      acceptedAnswers: new Map(
+        questions.map((q) => [q.id, new Set(q.answers.map((a) => normalizeAnswer(a.text)))]),
+      ),
       activeQuestionId: questions[0]?.id ?? null,
       players: new Map(),
       sockets: new Map([[socket, { userId: meta.userId, role: 'host' as Role }]]),
@@ -164,8 +169,17 @@ export class ActiveGameService {
     if (player.answers.some((a) => a.questionId === questionId)) {
       throw new GameFault('CONFLICT', 'Question already answered')
     }
+    // BR-63: a blank answer (after trimming) is not accepted
+    const normalized = normalizeAnswer(answer)
+    if (!normalized) {
+      throw new GameFault('BAD_REQUEST', 'Answer must not be empty')
+    }
     const accepted = room.acceptedAnswers.get(questionId)
-    player.answers.push({ questionId, text: answer, isCorrect: accepted?.has(answer) ?? false })
+    player.answers.push({
+      questionId,
+      text: answer,
+      isCorrect: accepted?.has(normalized) ?? false,
+    })
     this.broadcastGameData(room)
   }
 

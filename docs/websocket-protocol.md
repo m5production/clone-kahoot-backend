@@ -11,7 +11,7 @@ Heartbeat: серверный ping каждые 30 с; без pong — terminate
 | `START_GAME` | `{gameId}` | владелец игры | создать комнату; ответ `GAME_DATA` |
 | `PLAYER_CONNECTED` | `{gameId}` | любой юзер | войти/переподключиться в комнату → `GAME_DATA` всем |
 | `CHANGE_QUESTION` | `{questionId}` | ведущий | активный вопрос → `GAME_DATA` всем |
-| `ANSWER_QUESTION` | `{questionId, answer}` | игрок | фиксирует ответ (1 раз, только активный) → `GAME_DATA` всем |
+| `ANSWER_QUESTION` | `{questionId, answer}` | игрок | фиксирует ответ (1 раз, только активный; ≤100 символов, непустой после trim — BR-63; сравнение по нормализованной строке — BR-64) → `GAME_DATA` всем |
 | `SHOW_ANSWERS` | `{questionId}` | ведущий | `SHOW_ANSWERS` всем с ответами игроков |
 | `SHOW_WINNERS` | `null` | ведущий | `SHOW_WINNERS` всем со standings |
 | `END_GAME` | `null` | ведущий | `END_GAME` всем, комната удаляется, сокеты закрываются |

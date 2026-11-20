@@ -35,7 +35,7 @@ class AnswerQuestionDto {
   questionId!: string
 
   @IsString()
-  @MaxLength(200)
+  @MaxLength(100)
   answer!: string
 }
 

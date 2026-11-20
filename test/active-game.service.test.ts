@@ -148,3 +148,34 @@ test('second room is isolated from the first', async () => {
   // room 1 was not notified
   assert.equal(player.last('END_GAME'), undefined)
 })
+
+test('answers are compared after trim+lowercase normalization (BR-63, BR-64)', async () => {
+  prismaStub.question.findMany = async () => [
+    { id: 'q1', text: 'Capital?', img: null, order: 1, answers: [{ text: 'Paris' }] },
+    { id: 'q2', text: 'Tree?', img: null, order: 2, answers: [{ text: 'ёлка' }] },
+    { id: 'q3', text: 'Two words?', img: null, order: 3, answers: [{ text: 'a b' }] },
+  ]
+  const { service, host, player, fault } = setup()
+  await service.startGame(host as unknown as WebSocket, 'game-1')
+  await service.joinGame(player as unknown as WebSocket, 'game-1')
+
+  // BR-63: an answer that is blank after trimming is rejected
+  fault(() => service.answerQuestion(player as unknown as WebSocket, 'q1', '   '))
+
+  // BR-64: casing and surrounding whitespace are ignored
+  service.answerQuestion(player as unknown as WebSocket, 'q1', '  PARIS ')
+  // biome-ignore lint/complexity/useLiteralKeys: reaching into private state to verify stored answers
+  const stored = service['rooms'].get('game-1')!.players.get('player-1')!
+  assert.equal(stored.answers[0].text, '  PARIS ')
+  assert.equal(stored.answers[0].isCorrect, true)
+
+  // BR-64: ё and е are not folded together
+  service.changeQuestion(host as unknown as WebSocket, 'q2')
+  service.answerQuestion(player as unknown as WebSocket, 'q2', 'Елка')
+  assert.equal(stored.answers[1].isCorrect, false)
+
+  // BR-64: inner whitespace is preserved
+  service.changeQuestion(host as unknown as WebSocket, 'q3')
+  service.answerQuestion(player as unknown as WebSocket, 'q3', 'a  b')
+  assert.equal(stored.answers[2].isCorrect, false)
+})
