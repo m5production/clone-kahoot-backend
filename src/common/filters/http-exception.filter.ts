@@ -29,6 +29,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     let status = HttpStatus.INTERNAL_SERVER_ERROR
     let message = 'Internal server error'
+    let details: Record<string, unknown> = {}
 
     if (exception instanceof HttpException) {
       status = exception.getStatus()
@@ -39,6 +40,11 @@ export class HttpExceptionFilter implements ExceptionFilter {
           : Array.isArray((body as { message?: unknown }).message)
             ? (body as { message: string[] }).message.join('; ')
             : ((body as { message?: string }).message ?? exception.message)
+      if (typeof body === 'object' && body !== null) {
+        // extra fields (e.g. sessionId on a 409) pass through; framework keys do not
+        const { message: _m, statusCode: _s, error: _e, ...rest } = body as Record<string, unknown>
+        details = rest
+      }
     } else {
       this.logger.error(`Unhandled error (request ${requestId})`, exception)
     }
@@ -47,6 +53,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       code: statusToCode[status] ?? 'INTERNAL_ERROR',
       message,
       requestId,
+      ...details,
     })
   }
 }

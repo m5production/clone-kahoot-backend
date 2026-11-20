@@ -8,5 +8,6 @@ import { ActiveGameService } from './active-game.service'
   imports: [AuthModule],
   controllers: [ActiveGameController],
   providers: [ActiveGameService, ActiveGameGateway],
+  exports: [ActiveGameService],
 })
 export class ActiveGameModule {}

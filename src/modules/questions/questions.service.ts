@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import type { Question } from '@prisma/client'
 import { PrismaService } from '../../database/prisma.service'
+import { ActiveGameService } from '../active-game/active-game.service'
 import { GamesService } from '../games/games.service'
 
 export interface QuestionDto {
@@ -26,6 +27,7 @@ export class QuestionsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly games: GamesService,
+    private readonly activeGame: ActiveGameService,
   ) {}
 
   async listForGame(gameId: string, userId: string): Promise<QuestionWithAnswersCount[]> {
@@ -49,8 +51,8 @@ export class QuestionsService {
   }
 
   async create(userId: string, dto: QuestionDto): Promise<QuestionWithAnswersCount> {
-    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     await this.games.getOwned(dto.gameId, userId)
+    this.activeGame.assertQuizEditable(dto.gameId)
     const last = await this.prisma.question.findFirst({
       where: { gameId: dto.gameId },
       orderBy: { order: 'desc' },
@@ -81,8 +83,8 @@ export class QuestionsService {
     userId: string,
     dto: { text: string; img?: string | null },
   ): Promise<QuestionWithAnswersCount> {
-    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     const question = await this.get(id, userId)
+    this.activeGame.assertQuizEditable(question.gameId)
     const updated = await this.prisma.question.update({
       where: { id },
       data: { text: dto.text, img: dto.img ?? question.img },
@@ -93,8 +95,8 @@ export class QuestionsService {
   }
 
   async delete(id: string, userId: string): Promise<Question> {
-    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     const question = await this.get(id, userId)
+    this.activeGame.assertQuizEditable(question.gameId)
     await this.prisma.question.delete({ where: { id } })
     await this.games.touch(question.gameId)
     return question

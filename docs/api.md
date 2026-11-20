@@ -26,7 +26,8 @@
 | GET/POST | `/questions(?gameId=)` | Bearer | список по игре (с `answersCount`), создание (order вычисляется); `text` ≤ 300 |
 | GET/PUT/DELETE | `/questions/:id` | Bearer | только владелец игры |
 | GET/POST/PUT/DELETE | `/accepted-answers(?questionId=)` | Bearer | ответы вопроса, `text` ≤ 100; POST/PUT — 1–10 штук без дублей после нормализации; PUT — транзакционная замена `[{text}]` |
-| GET | `/active-game/:id` | Bearer | запущена ли комната |
+| POST | `/games/:id/sessions` | Bearer | только владелец; создать сеанс (лобби) → `{sessionId, joinPath}`; 409 с полем `sessionId` существующего сеанса, если он уже идёт |
+| GET | `/sessions/:id` | Bearer | публичное описание сеанса `{state, quizTitle, hostName}` для входа по ссылке; 410 — сеанс завершён |
 | GET | `/health/live` `/health/ready` | публичный | probes |
 
 ## Ошибки

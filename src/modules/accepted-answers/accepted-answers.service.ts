@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common'
 import type { AcceptedAnswer, Question } from '@prisma/client'
 import { PrismaService } from '../../database/prisma.service'
+import { ActiveGameService } from '../active-game/active-game.service'
 import { GamesService } from '../games/games.service'
 import { assertValidAnswerTexts } from './accepted-answers.util'
 
@@ -9,10 +10,10 @@ export class AcceptedAnswersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly games: GamesService,
+    private readonly activeGame: ActiveGameService,
   ) {}
 
   private async getOwnedQuestion(questionId: string, userId: string): Promise<Question> {
-    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     const question = await this.prisma.question.findUnique({ where: { id: questionId } })
     if (!question) {
       throw new NotFoundException(`Question with id ${questionId} was not found`)
@@ -28,6 +29,7 @@ export class AcceptedAnswersService {
 
   async create(questionId: string, userId: string, texts: string[]): Promise<AcceptedAnswer[]> {
     const question = await this.getOwnedQuestion(questionId, userId)
+    this.activeGame.assertQuizEditable(question.gameId)
     const existing = await this.prisma.acceptedAnswer.findMany({
       where: { questionId },
       select: { text: true },
@@ -45,6 +47,7 @@ export class AcceptedAnswersService {
 
   async replace(questionId: string, userId: string, texts: string[]): Promise<AcceptedAnswer[]> {
     const question = await this.getOwnedQuestion(questionId, userId)
+    this.activeGame.assertQuizEditable(question.gameId)
     assertValidAnswerTexts([], texts)
     const replaced = await this.prisma.$transaction(async (tx) => {
       await tx.acceptedAnswer.deleteMany({ where: { questionId } })
@@ -59,6 +62,7 @@ export class AcceptedAnswersService {
 
   async deleteAll(questionId: string, userId: string): Promise<{ count: number }> {
     const question = await this.getOwnedQuestion(questionId, userId)
+    this.activeGame.assertQuizEditable(question.gameId)
     const result = await this.prisma.acceptedAnswer.deleteMany({ where: { questionId } })
     await this.games.touch(question.gameId)
     return result

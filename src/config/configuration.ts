@@ -45,6 +45,7 @@ export interface AppConfig {
   trustProxy: boolean
   sessionTtlSeconds: number
   wsTicketTtlSeconds: number
+  hostGraceSeconds: number
   httpBodyLimit: string
   wsPayloadLimit: number
 }
@@ -75,6 +76,8 @@ export const appConfig = registerAs('app', (): AppConfig => {
     trustProxy: bool(env.TRUST_PROXY, nodeEnv === 'production'),
     sessionTtlSeconds: int(env.SESSION_TTL_SECONDS ?? '2592000', 'SESSION_TTL_SECONDS'),
     wsTicketTtlSeconds: int(env.WS_TICKET_TTL_SECONDS ?? '30', 'WS_TICKET_TTL_SECONDS'),
+    // BR-59: how long a session waits for its host to reconnect before aborting
+    hostGraceSeconds: int(env.HOST_GRACE_SECONDS ?? '300', 'HOST_GRACE_SECONDS'),
     httpBodyLimit: env.HTTP_BODY_LIMIT ?? '64kb',
     wsPayloadLimit: int(env.WS_PAYLOAD_LIMIT ?? '16384', 'WS_PAYLOAD_LIMIT'),
   }

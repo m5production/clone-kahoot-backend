@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common'
 import type { Game } from '@prisma/client'
 import { PrismaService } from '../../database/prisma.service'
+import { ActiveGameService } from '../active-game/active-game.service'
 import { assertQuestionIdPermutation } from './reorder-questions.util'
 
 export interface GameSummary {
@@ -12,7 +13,10 @@ export interface GameSummary {
 
 @Injectable()
 export class GamesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activeGame: ActiveGameService,
+  ) {}
 
   async listForUser(adminId: string): Promise<GameSummary[]> {
     const games = await this.prisma.game.findMany({
@@ -40,14 +44,14 @@ export class GamesService {
   }
 
   async rename(id: string, adminId: string, title: string): Promise<Game> {
-    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     await this.getOwned(id, adminId)
+    this.activeGame.assertQuizEditable(id)
     return this.prisma.game.update({ where: { id }, data: { title } })
   }
 
   async delete(id: string, adminId: string): Promise<Game> {
-    // TODO(stage 4a, BR-54): reject deletion while a session is running for this game
     const game = await this.getOwned(id, adminId)
+    this.activeGame.assertQuizEditable(id)
     await this.prisma.game.delete({ where: { id } })
     return game
   }
@@ -58,8 +62,8 @@ export class GamesService {
   }
 
   async reorderQuestions(gameId: string, adminId: string, questionIds: string[]): Promise<void> {
-    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     await this.getOwned(gameId, adminId)
+    this.activeGame.assertQuizEditable(gameId)
     const questions = await this.prisma.question.findMany({
       where: { gameId },
       select: { id: true },

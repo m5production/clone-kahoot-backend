@@ -17,16 +17,10 @@ import type { AppConfig } from '../../config/configuration'
 import { AuthService } from '../auth/auth.service'
 import { ActiveGameService, GameFault } from './active-game.service'
 
-class GameIdDto {
+class JoinSessionDto {
   @IsString()
   @IsNotEmpty()
-  gameId!: string
-}
-
-class ChangeQuestionDto {
-  @IsString()
-  @IsNotEmpty()
-  questionId!: string
+  sessionId!: string
 }
 
 class AnswerQuestionDto {
@@ -40,13 +34,14 @@ class AnswerQuestionDto {
 }
 
 const KNOWN_EVENTS = new Set([
+  'JOIN_SESSION',
   'START_GAME',
-  'PLAYER_CONNECTED',
-  'CHANGE_QUESTION',
-  'ANSWER_QUESTION',
+  'NEXT_QUESTION',
+  'CLOSE_QUESTION',
   'SHOW_ANSWERS',
   'SHOW_WINNERS',
-  'END_GAME',
+  'END_SESSION',
+  'ANSWER_QUESTION',
 ])
 
 const parseBody = <T extends object>(cls: new () => T, body: unknown): T => {
@@ -123,21 +118,41 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
     this.activeGame.unregisterClient(client)
   }
 
-  @SubscribeMessage('START_GAME')
-  startGame(@ConnectedSocket() client: WebSocket, @MessageBody() body: unknown): void {
-    this.run(client, () => this.activeGame.startGame(client, parseBody(GameIdDto, body).gameId))
-  }
-
-  @SubscribeMessage('PLAYER_CONNECTED')
-  joinGame(@ConnectedSocket() client: WebSocket, @MessageBody() body: unknown): void {
-    this.run(client, () => this.activeGame.joinGame(client, parseBody(GameIdDto, body).gameId))
-  }
-
-  @SubscribeMessage('CHANGE_QUESTION')
-  changeQuestion(@ConnectedSocket() client: WebSocket, @MessageBody() body: unknown): void {
+  @SubscribeMessage('JOIN_SESSION')
+  joinSession(@ConnectedSocket() client: WebSocket, @MessageBody() body: unknown): void {
     this.run(client, () =>
-      this.activeGame.changeQuestion(client, parseBody(ChangeQuestionDto, body).questionId),
+      this.activeGame.joinSession(client, parseBody(JoinSessionDto, body).sessionId),
     )
+  }
+
+  @SubscribeMessage('START_GAME')
+  startGame(@ConnectedSocket() client: WebSocket): void {
+    this.run(client, () => this.activeGame.startGame(client))
+  }
+
+  @SubscribeMessage('NEXT_QUESTION')
+  nextQuestion(@ConnectedSocket() client: WebSocket): void {
+    this.run(client, () => this.activeGame.nextQuestion(client))
+  }
+
+  @SubscribeMessage('CLOSE_QUESTION')
+  closeQuestion(@ConnectedSocket() client: WebSocket): void {
+    this.run(client, () => this.activeGame.closeQuestion(client))
+  }
+
+  @SubscribeMessage('SHOW_ANSWERS')
+  showAnswers(@ConnectedSocket() client: WebSocket): void {
+    this.run(client, () => this.activeGame.showAnswers(client))
+  }
+
+  @SubscribeMessage('SHOW_WINNERS')
+  showWinners(@ConnectedSocket() client: WebSocket): void {
+    this.run(client, () => this.activeGame.showWinners(client))
+  }
+
+  @SubscribeMessage('END_SESSION')
+  endSession(@ConnectedSocket() client: WebSocket): void {
+    this.run(client, () => this.activeGame.endSession(client))
   }
 
   @SubscribeMessage('ANSWER_QUESTION')
@@ -146,23 +161,6 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
       const dto = parseBody(AnswerQuestionDto, body)
       this.activeGame.answerQuestion(client, dto.questionId, dto.answer)
     })
-  }
-
-  @SubscribeMessage('SHOW_ANSWERS')
-  showAnswers(@ConnectedSocket() client: WebSocket, @MessageBody() body: unknown): void {
-    this.run(client, () =>
-      this.activeGame.showAnswers(client, parseBody(ChangeQuestionDto, body).questionId),
-    )
-  }
-
-  @SubscribeMessage('SHOW_WINNERS')
-  showWinners(@ConnectedSocket() client: WebSocket): void {
-    this.run(client, () => this.activeGame.showWinners(client))
-  }
-
-  @SubscribeMessage('END_GAME')
-  endGame(@ConnectedSocket() client: WebSocket): void {
-    this.run(client, () => this.activeGame.endGame(client))
   }
 
   private run(client: WebSocket, fn: () => unknown): void {
