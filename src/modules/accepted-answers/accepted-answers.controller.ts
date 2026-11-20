@@ -18,9 +18,10 @@ import type { PublicUser } from '../auth/auth.service'
 import { AcceptedAnswersService } from './accepted-answers.service'
 
 class AnswerItemDto {
+  // BR-47: 1-100 chars per answer; the service also rejects blanks and duplicates
   @IsString()
   @IsNotEmpty()
-  @MaxLength(200)
+  @MaxLength(100)
   text!: string
 }
 

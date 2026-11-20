@@ -20,11 +20,12 @@
 | POST | `/users/logout` | Bearer | отзыв сессии → 204 |
 | POST | `/auth/ws-ticket` | Bearer | одноразовый WS-билет |
 | GET/PUT/DELETE | `/users/:id` | Bearer/публичный GET | профиль; изменения — только свои |
-| GET/POST | `/games` | Bearer | список и создание своих квизов |
-| GET/DELETE | `/games/:id` | Bearer | только владелец |
-| GET/POST | `/questions(?gameId=)` | Bearer | список по игре, создание (order вычисляется) |
+| GET/POST | `/games` | Bearer | список `{id,title,questionCount,updatedAt}` по `updatedAt desc`; создание `{title}` |
+| GET/PATCH/DELETE | `/games/:id` | Bearer | только владелец; PATCH — переименование `{title}` |
+| PATCH | `/games/:id/questions/reorder` | Bearer | перестановка вопросов `{questionIds}` — обязана быть перестановкой текущих id |
+| GET/POST | `/questions(?gameId=)` | Bearer | список по игре (с `answersCount`), создание (order вычисляется); `text` ≤ 300 |
 | GET/PUT/DELETE | `/questions/:id` | Bearer | только владелец игры |
-| GET/POST/PUT/DELETE | `/accepted-answers(?questionId=)` | Bearer | ответы вопроса; PUT — транзакционная замена `[{text}]` |
+| GET/POST/PUT/DELETE | `/accepted-answers(?questionId=)` | Bearer | ответы вопроса, `text` ≤ 100; POST/PUT — 1–10 штук без дублей после нормализации; PUT — транзакционная замена `[{text}]` |
 | GET | `/active-game/:id` | Bearer | запущена ли комната |
 | GET | `/health/live` `/health/ready` | публичный | probes |
 
@@ -48,5 +49,7 @@
 - Регистрация/вход возвращают `token`; cookie `authorization` больше нет.
 - `GET /users/:id` не создаёт сессию.
 - Создание игры/вопросов/ответов требует Bearer; владелец из сессии.
+- У `Game` обязательный `title` (1–80, trim) и `updatedAt`, который обновляется
+  и при изменениях вопросов/ответов квиза (BR-45).
 - `AcceptedAnswer` в body — только `{text}`; `questionId` — query-параметр.
-- `Question` имеет `order`.
+- `Question` имеет `order`; порядок меняется через `PATCH /games/:id/questions/reorder`.

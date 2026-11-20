@@ -1,19 +1,20 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common'
 import type { Question } from '@prisma/client'
+import { Transform } from 'class-transformer'
 import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthGuard } from '../../common/guards/auth.guard'
 import type { PublicUser } from '../auth/auth.service'
-import { QuestionsService } from './questions.service'
+import { QuestionsService, type QuestionWithAnswersCount } from './questions.service'
 
 class CreateQuestionDto {
   @IsString()
   @IsNotEmpty()
   gameId!: string
 
-  // A new question is a placeholder: the editor fills its text afterwards
+  // A new question is a placeholder: the editor fills its text afterwards (BR-46)
   @IsString()
-  @MaxLength(500)
+  @MaxLength(300)
   text!: string
 
   @IsOptional()
@@ -23,9 +24,10 @@ class CreateQuestionDto {
 }
 
 class UpdateQuestionDto {
+  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
   @IsNotEmpty()
-  @MaxLength(500)
+  @MaxLength(300)
   text!: string
 
   @IsOptional()
@@ -40,17 +42,23 @@ export class QuestionsController {
   constructor(private readonly questions: QuestionsService) {}
 
   @Get()
-  list(@Query('gameId') gameId: string, @CurrentUser() user: PublicUser): Promise<Question[]> {
+  list(
+    @Query('gameId') gameId: string,
+    @CurrentUser() user: PublicUser,
+  ): Promise<QuestionWithAnswersCount[]> {
     return this.questions.listForGame(gameId, user.id)
   }
 
   @Get(':id')
-  get(@Param('id') id: string, @CurrentUser() user: PublicUser): Promise<Question> {
+  get(@Param('id') id: string, @CurrentUser() user: PublicUser): Promise<QuestionWithAnswersCount> {
     return this.questions.get(id, user.id)
   }
 
   @Post()
-  create(@Body() dto: CreateQuestionDto, @CurrentUser() user: PublicUser): Promise<Question> {
+  create(
+    @Body() dto: CreateQuestionDto,
+    @CurrentUser() user: PublicUser,
+  ): Promise<QuestionWithAnswersCount> {
     return this.questions.create(user.id, dto)
   }
 
@@ -59,7 +67,7 @@ export class QuestionsController {
     @Param('id') id: string,
     @Body() dto: UpdateQuestionDto,
     @CurrentUser() user: PublicUser,
-  ): Promise<Question> {
+  ): Promise<QuestionWithAnswersCount> {
     return this.questions.update(id, user.id, dto)
   }
 

@@ -34,7 +34,7 @@ export const createApp = async (): Promise<NestExpressApplication> => {
   app.enableCors({
     origin: appConfig.allowedOrigins,
     allowedHeaders: ['Content-Type', 'Authorization'],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   })
   if (appConfig.trustProxy) app.set('trust proxy', 1)
   app.useGlobalPipes(

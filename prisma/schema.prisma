@@ -33,7 +33,9 @@ model Game {
   id        String     @id @default(cuid())
   adminId   String
   admin     User       @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  title     String     @db.VarChar(80)
   createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
   questions Question[]
 
   @@index([adminId])
@@ -45,7 +47,7 @@ model Question {
   game    Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
   order   Int
   img     String?          @db.VarChar(2048)
-  text    String           @db.VarChar(500)
+  text    String           @db.VarChar(300)
   answers AcceptedAnswer[]
 
   @@unique([gameId, order])
@@ -56,7 +58,7 @@ model AcceptedAnswer {
   id         String   @id @default(cuid())
   questionId String
   question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  text       String   @db.VarChar(200)
+  text       String   @db.VarChar(100)
 
   @@index([questionId])
 }

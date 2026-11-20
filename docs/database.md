@@ -9,14 +9,18 @@ User ─┬─< Session        (сессии: хеш токена, expiresAt, re
       └─< Game ──< Question ──< AcceptedAnswer
 ```
 
-- `User`: `id`, `name` (unique, CHECK непустой), `passwordHash` (scrypt), timestamps.
+- `User`: `id`, `name` (unique + функциональный unique `lower(name)` — регистронезависимо,
+  CHECK непустой), `passwordHash` (scrypt), timestamps.
 - `Session`: `id`, `tokenHash` (unique), `userId` → cascade, `createdAt`,
   `expiresAt`, `revokedAt` (nullable). Сам токен в БД не хранится.
-- `Game`: `id`, `adminId` → `User` cascade, `createdAt`.
-- `Question`: `id`, `gameId` → cascade, `order`, `text`, `img` (nullable);
-  unique `(gameId, order)`. Пустой `text` допускается — редактор создаёт
-  вопрос-плейсхолдер (миграция `20261119123000`).
-- `AcceptedAnswer`: `id`, `questionId` → cascade, `text` (CHECK непустой).
+- `Game`: `id`, `adminId` → `User` cascade, `title` (`VarChar(80)`, обязательное —
+  существующие строки добиты «Quiz #N»), `createdAt`, `updatedAt` (`@updatedAt`;
+  сервис трогает его и при изменениях вопросов/ответов — BR-45).
+- `Question`: `id`, `gameId` → cascade, `order`, `text` (`VarChar(300)`), `img`
+  (nullable); unique `(gameId, order)`. Пустой `text` допускается — редактор
+  создаёт вопрос-плейсхолдер (миграция `20261119123000`).
+- `AcceptedAnswer`: `id`, `questionId` → cascade, `text` (`VarChar(100)`,
+  CHECK непустой).
 
 Удаление пользователя каскадно удаляет его игры, вопросы и ответы.
 

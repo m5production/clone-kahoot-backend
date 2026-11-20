@@ -98,6 +98,15 @@ export class ActiveGameService {
       orderBy: { order: 'asc' },
       include: { answers: true },
     })
+    // BR-49: a quiz is launchable only when every question has text and answers
+    const quizNotReady =
+      questions.length === 0 || questions.some((q) => !q.text.trim() || q.answers.length === 0)
+    if (quizNotReady) {
+      throw new GameFault(
+        'BAD_REQUEST',
+        'The quiz is not ready: every question needs text and at least one accepted answer',
+      )
+    }
     const room: Room = {
       gameId,
       hostSocket: socket,

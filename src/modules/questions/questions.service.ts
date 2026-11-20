@@ -9,6 +9,18 @@ export interface QuestionDto {
   img?: string | null
 }
 
+export type QuestionWithAnswersCount = Question & { answersCount: number }
+
+const answersCountInclude = { _count: { select: { answers: true } } } as const
+
+const withAnswersCount = ({
+  _count,
+  ...question
+}: Question & { _count: { answers: number } }): QuestionWithAnswersCount => ({
+  ...question,
+  answersCount: _count.answers,
+})
+
 @Injectable()
 export class QuestionsService {
   constructor(
@@ -16,19 +28,28 @@ export class QuestionsService {
     private readonly games: GamesService,
   ) {}
 
-  async listForGame(gameId: string, userId: string): Promise<Question[]> {
+  async listForGame(gameId: string, userId: string): Promise<QuestionWithAnswersCount[]> {
     await this.games.getOwned(gameId, userId)
-    return this.prisma.question.findMany({ where: { gameId }, orderBy: { order: 'asc' } })
+    const questions = await this.prisma.question.findMany({
+      where: { gameId },
+      orderBy: { order: 'asc' },
+      include: answersCountInclude,
+    })
+    return questions.map(withAnswersCount)
   }
 
-  async get(id: string, userId: string): Promise<Question> {
-    const question = await this.prisma.question.findUnique({ where: { id } })
+  async get(id: string, userId: string): Promise<QuestionWithAnswersCount> {
+    const question = await this.prisma.question.findUnique({
+      where: { id },
+      include: answersCountInclude,
+    })
     if (!question) throw new NotFoundException(`Question with id ${id} was not found`)
     await this.games.getOwned(question.gameId, userId)
-    return question
+    return withAnswersCount(question)
   }
 
-  async create(userId: string, dto: QuestionDto): Promise<Question> {
+  async create(userId: string, dto: QuestionDto): Promise<QuestionWithAnswersCount> {
+    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     await this.games.getOwned(dto.gameId, userId)
     const last = await this.prisma.question.findFirst({
       where: { gameId: dto.gameId },
@@ -36,14 +57,17 @@ export class QuestionsService {
       select: { order: true },
     })
     try {
-      return await this.prisma.question.create({
+      const question = await this.prisma.question.create({
         data: {
           gameId: dto.gameId,
           text: dto.text,
           img: dto.img ?? null,
           order: (last?.order ?? 0) + 1,
         },
+        include: answersCountInclude,
       })
+      await this.games.touch(dto.gameId)
+      return withAnswersCount(question)
     } catch (error) {
       if ((error as { code?: string }).code === 'P2002') {
         throw new BadRequestException('Question order conflict, retry')
@@ -56,17 +80,23 @@ export class QuestionsService {
     id: string,
     userId: string,
     dto: { text: string; img?: string | null },
-  ): Promise<Question> {
+  ): Promise<QuestionWithAnswersCount> {
+    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     const question = await this.get(id, userId)
-    return this.prisma.question.update({
+    const updated = await this.prisma.question.update({
       where: { id },
       data: { text: dto.text, img: dto.img ?? question.img },
+      include: answersCountInclude,
     })
+    await this.games.touch(question.gameId)
+    return withAnswersCount(updated)
   }
 
   async delete(id: string, userId: string): Promise<Question> {
+    // TODO(stage 4a, BR-54): reject changes while a session is running for this game
     const question = await this.get(id, userId)
     await this.prisma.question.delete({ where: { id } })
+    await this.games.touch(question.gameId)
     return question
   }
 }

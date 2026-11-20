@@ -30,7 +30,8 @@ Heartbeat: серверный ping каждые 30 с; без pong — terminate
 
 ## FAULT-коды
 
-`BAD_REQUEST` (битый JSON/невалидный payload/не тот вопрос),
+`BAD_REQUEST` (битый JSON/невалидный payload/не тот вопрос/квиз не готов
+к запуску — BR-49),
 `UNKNOWN_EVENT`, `UNAUTHORIZED` (нет сокета в комнате), `FORBIDDEN`
 (не та роль), `NOT_FOUND`, `NOT_RUNNING`, `ALREADY_RUNNING`, `CONFLICT`
 (повторный ответ), `INTERNAL_ERROR`.
