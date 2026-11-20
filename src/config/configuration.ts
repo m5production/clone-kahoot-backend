@@ -73,7 +73,7 @@ export const appConfig = registerAs('app', (): AppConfig => {
     databaseUrl,
     allowedOrigins,
     trustProxy: bool(env.TRUST_PROXY, nodeEnv === 'production'),
-    sessionTtlSeconds: int(env.SESSION_TTL_SECONDS ?? '604800', 'SESSION_TTL_SECONDS'),
+    sessionTtlSeconds: int(env.SESSION_TTL_SECONDS ?? '2592000', 'SESSION_TTL_SECONDS'),
     wsTicketTtlSeconds: int(env.WS_TICKET_TTL_SECONDS ?? '30', 'WS_TICKET_TTL_SECONDS'),
     httpBodyLimit: env.HTTP_BODY_LIMIT ?? '64kb',
     wsPayloadLimit: int(env.WS_PAYLOAD_LIMIT ?? '16384', 'WS_PAYLOAD_LIMIT'),

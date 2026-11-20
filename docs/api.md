@@ -35,6 +35,14 @@
 `NOT_FOUND`, `VALIDATION_ERROR`, `CONFLICT`, `TOO_MANY_REQUESTS`,
 `INTERNAL_ERROR`.
 
+## Креды (`POST /users`, `POST /users/auth`, `PUT /users/:id`)
+
+- `name` — обрезается по краям, 3–20 символов; уникален без учёта регистра
+  (конфликт → 409 `CONFLICT`).
+- `password` — 8–128 символов.
+- `POST /users/auth` отвечает одинаковым `401 Invalid name or password` и на
+  неизвестное имя, и на неверный пароль.
+
 ## Отличия от старого Express-API (намеренные)
 
 - Регистрация/вход возвращают `token`; cookie `authorization` больше нет.

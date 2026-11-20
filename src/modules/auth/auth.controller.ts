@@ -1,19 +1,24 @@
 import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common'
-import { IsNotEmpty, IsString, MaxLength, MinLength } from 'class-validator'
+import { Transform } from 'class-transformer'
+import { IsString, MaxLength, MinLength } from 'class-validator'
 import { CurrentUser, SessionToken } from '../../common/decorators/current-user.decorator'
 import { AuthGuard } from '../../common/guards/auth.guard'
 import { RateLimit } from '../../common/guards/rate-limit.guard'
 import { AuthService, type PublicUser } from './auth.service'
 
-class CredentialsDto {
+const trimString = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value
+
+// BR-40, BR-41
+export class CredentialsDto {
+  @Transform(trimString)
   @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
+  @MinLength(3)
+  @MaxLength(20)
   name!: string
 
   @IsString()
-  @IsNotEmpty()
-  @MinLength(1)
+  @MinLength(8)
   @MaxLength(128)
   password!: string
 }

@@ -10,23 +10,11 @@ import {
   Put,
   UseGuards,
 } from '@nestjs/common'
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthGuard } from '../../common/guards/auth.guard'
+import { CredentialsDto } from '../auth/auth.controller'
 import type { PublicUser } from '../auth/auth.service'
 import { UsersService } from './users.service'
-
-class UpdateUserDto {
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(64)
-  name!: string
-
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(128)
-  password!: string
-}
 
 @Controller('users')
 export class UsersController {
@@ -44,7 +32,7 @@ export class UsersController {
   async update(
     @Param('id') id: string,
     @CurrentUser() user: PublicUser,
-    @Body() dto: UpdateUserDto,
+    @Body() dto: CredentialsDto,
   ): Promise<PublicUser> {
     if (user.id !== id) throw new ForbiddenException('Cannot modify another user')
     return this.users.update(id, dto.name, dto.password)
