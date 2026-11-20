@@ -1,11 +1,13 @@
 import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common'
 import type { Question } from '@prisma/client'
 import { Transform } from 'class-transformer'
-import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { AuthGuard } from '../../common/guards/auth.guard'
 import type { PublicUser } from '../auth/auth.service'
 import { QuestionsService, type QuestionWithAnswersCount } from './questions.service'
+
+const TIME_LIMITS_SEC = [10, 20, 30, 60, 90, 120]
 
 class CreateQuestionDto {
   @IsString()
@@ -21,6 +23,12 @@ class CreateQuestionDto {
   @IsString()
   @MaxLength(2048)
   img?: string | null
+
+  // BR-48: seconds to answer, from a fixed set (default 20)
+  @IsOptional()
+  @IsInt()
+  @IsIn(TIME_LIMITS_SEC)
+  timeLimitSec?: number
 }
 
 class UpdateQuestionDto {
@@ -34,6 +42,12 @@ class UpdateQuestionDto {
   @IsString()
   @MaxLength(2048)
   img?: string | null
+
+  // BR-48
+  @IsOptional()
+  @IsInt()
+  @IsIn(TIME_LIMITS_SEC)
+  timeLimitSec?: number
 }
 
 @Controller('questions')

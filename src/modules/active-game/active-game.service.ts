@@ -27,7 +27,13 @@ interface PlayerState {
   id: string
   name: string
   bgColor: string
-  answers: { questionId: string; text: string; isCorrect: boolean }[]
+  answers: {
+    questionId: string
+    text: string
+    isCorrect: boolean
+    points: number
+    responseTimeMs: number
+  }[]
   connected: boolean
 }
 
@@ -35,6 +41,7 @@ interface QuestionSnapshot {
   id: string
   text: string
   img: string | null
+  timeLimitSec: number
   acceptedTexts: string[]
   acceptedNormalized: Set<string>
 }
@@ -47,6 +54,9 @@ interface Room {
   hostName: string
   state: SessionState
   questionIndex: number
+  questionStartedAt: number
+  questionEndsAt: number
+  questionTimer: NodeJS.Timeout | null
   questions: QuestionSnapshot[]
   players: Map<string, PlayerState>
   sockets: Map<WebSocket, { userId: string; role: Role }>
@@ -72,7 +82,33 @@ export interface SessionStateMessage {
     connected: boolean
     answered: boolean
   }[]
-  question: { id: string; text: string; img: string | null; number: number; total: number } | null
+  question: {
+    id: string
+    text: string
+    img: string | null
+    number: number
+    total: number
+    endsAt: number
+  } | null
+  /** NFR-P6: the server clock, so all clients show the same countdown */
+  serverNow: number
+}
+
+// BR-70: a correct answer scores 1000 down to 500 points by response time
+const MAX_POINTS = 1000
+
+export const scoreAnswer = (responseTimeMs: number, timeLimitSec: number): number => {
+  const limitMs = timeLimitSec * 1000
+  const t = Math.min(Math.max(responseTimeMs, 0), limitMs)
+  return Math.round(MAX_POINTS * (1 - t / (2 * limitMs)))
+}
+
+interface Standing {
+  place: number
+  id: string
+  name: string
+  score: number
+  correctCount: number
 }
 
 export class GameFault extends Error {
@@ -183,10 +219,14 @@ export class ActiveGameService {
       hostName: host.name,
       state: 'lobby',
       questionIndex: -1,
+      questionStartedAt: 0,
+      questionEndsAt: 0,
+      questionTimer: null,
       questions: questions.map((q) => ({
         id: q.id,
         text: q.text,
         img: q.img,
+        timeLimitSec: q.timeLimitSec,
         acceptedTexts: q.answers.map((a) => a.text),
         acceptedNormalized: new Set(q.answers.map((a) => normalizeAnswer(a.text))),
       })),
@@ -270,9 +310,7 @@ export class ActiveGameService {
     if (room.state !== 'lobby') {
       throw new GameFault('BAD_REQUEST', 'The game can only be started from the lobby')
     }
-    room.questionIndex = 0
-    room.state = 'question_open'
-    this.broadcastSessionState(room)
+    this.openQuestion(room, 0)
   }
 
   /** NEXT_QUESTION — strictly the next one in order (BR-60, FR-64) */
@@ -285,14 +323,15 @@ export class ActiveGameService {
     if (room.questionIndex === room.questions.length - 1) {
       throw new GameFault('BAD_REQUEST', 'This was the last question; show the winners')
     }
-    room.questionIndex += 1
-    room.state = 'question_open'
-    this.broadcastSessionState(room)
+    this.openQuestion(room, room.questionIndex + 1)
   }
 
   /** CLOSE_QUESTION — early close by the host (BR-61, FR-66) */
   closeQuestion(socket: WebSocket): void {
     const room = this.requireHostRoom(socket)
+    if (room.state !== 'question_open') {
+      throw new GameFault('BAD_REQUEST', 'No question is open')
+    }
     this.closeCurrentQuestion(room)
   }
 
@@ -335,6 +374,12 @@ export class ActiveGameService {
     if (question.id !== questionId) {
       throw new GameFault('BAD_REQUEST', 'Answer does not match the active question')
     }
+    // BR-62: an answer received after the time is up is rejected even if the
+    // close timer has not fired yet
+    const receivedAt = Date.now()
+    if (receivedAt >= room.questionEndsAt) {
+      throw new GameFault('BAD_REQUEST', 'The question is closed')
+    }
     const player = room.players.get(userId)
     if (!player) throw new GameFault('FORBIDDEN', 'Not a player of this room')
     // BR-63: only the first answer counts
@@ -346,10 +391,15 @@ export class ActiveGameService {
     if (!normalized) {
       throw new GameFault('BAD_REQUEST', 'Answer must not be empty')
     }
+    const responseTimeMs = receivedAt - room.questionStartedAt
+    const isCorrect = question.acceptedNormalized.has(normalized)
     player.answers.push({
       questionId,
       text: answer,
-      isCorrect: question.acceptedNormalized.has(normalized),
+      isCorrect,
+      // BR-70/BR-71: speed-based points for a correct answer, 0 otherwise
+      points: isCorrect ? scoreAnswer(responseTimeMs, question.timeLimitSec) : 0,
+      responseTimeMs,
     })
     this.send(socket, 'ANSWER_ACCEPTED', { questionId, text: answer })
     this.maybeCloseQuestion(room)
@@ -369,15 +419,35 @@ export class ActiveGameService {
     }
   }
 
+  /** BR-61: a question opens with a server-side timer that closes it */
+  private openQuestion(room: Room, index: number): void {
+    room.questionIndex = index
+    room.state = 'question_open'
+    room.questionStartedAt = Date.now()
+    room.questionEndsAt = room.questionStartedAt + room.questions[index].timeLimitSec * 1000
+    room.questionTimer = setTimeout(
+      () => this.closeCurrentQuestion(room),
+      Math.max(room.questionEndsAt - room.questionStartedAt, 0),
+    )
+    room.questionTimer.unref?.()
+    this.broadcastSessionState(room)
+  }
+
   private closeCurrentQuestion(room: Room): void {
-    if (room.state !== 'question_open') {
-      throw new GameFault('BAD_REQUEST', 'No question is open')
-    }
+    if (room.state !== 'question_open') return
+    this.stopQuestionTimer(room)
     room.state = 'question_closed'
     this.broadcast(room, 'QUESTION_CLOSED', {
       questionId: room.questions[room.questionIndex].id,
     })
     this.broadcastSessionState(room)
+  }
+
+  private stopQuestionTimer(room: Room): void {
+    if (room.questionTimer) {
+      clearTimeout(room.questionTimer)
+      room.questionTimer = null
+    }
   }
 
   private answersRevealed(room: Room): unknown {
@@ -393,6 +463,7 @@ export class ActiveGameService {
           playerName: player.name,
           text: found?.text ?? null,
           isCorrect: found?.isCorrect ?? false,
+          points: found?.points ?? 0,
         }
       }),
     }
@@ -402,14 +473,34 @@ export class ActiveGameService {
     this.send(socket, 'ANSWERS_REVEALED', this.answersRevealed(room))
   }
 
-  private standings(room: Room): { id: string; name: string; score: number }[] {
-    return [...room.players.values()]
-      .map((p) => ({
-        id: p.id,
-        name: p.name,
-        score: p.answers.filter((a) => a.isCorrect).length,
-      }))
-      .sort((a, b) => b.score - a.score)
+  /** BR-72/BR-73: score desc, then total correct response time asc; full ties share the place */
+  private standings(room: Room): Standing[] {
+    const rows = [...room.players.values()]
+      .map((p) => {
+        const correct = p.answers.filter((a) => a.isCorrect)
+        return {
+          id: p.id,
+          name: p.name,
+          score: p.answers.reduce((sum, a) => sum + a.points, 0),
+          correctCount: correct.length,
+          correctTimeMs: correct.reduce((sum, a) => sum + a.responseTimeMs, 0),
+        }
+      })
+      .sort((a, b) => b.score - a.score || a.correctTimeMs - b.correctTimeMs)
+
+    let place = 0
+    return rows.map((row, index) => {
+      const previous = rows[index - 1]
+      if (
+        !previous ||
+        previous.score !== row.score ||
+        previous.correctTimeMs !== row.correctTimeMs
+      ) {
+        place = index + 1
+      }
+      const { correctTimeMs: _t, ...standing } = row
+      return { place, ...standing }
+    })
   }
 
   private isHostConnected(room: Room): boolean {
@@ -433,6 +524,7 @@ export class ActiveGameService {
 
   private endRoom(room: Room, reason: SessionEndReason): void {
     this.stopHostGrace(room)
+    this.stopQuestionTimer(room)
     this.rooms.delete(room.sessionId)
     this.endedSessions.set(room.sessionId, reason === 'finished' ? 'finished' : 'aborted')
     this.broadcast(room, 'SESSION_ENDED', { reason })
@@ -464,8 +556,10 @@ export class ActiveGameService {
             img: question.img,
             number: room.questionIndex + 1,
             total: room.questions.length,
+            endsAt: room.questionEndsAt,
           }
         : null,
+      serverNow: Date.now(),
     }
   }
 

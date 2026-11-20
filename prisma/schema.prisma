@@ -48,6 +48,8 @@ model Question {
   order   Int
   img     String?          @db.VarChar(2048)
   text    String           @db.VarChar(300)
+  // BR-48: time to answer; allowed values are enforced by a CHECK in the migration
+  timeLimitSec Int            @default(20) @db.SmallInt
   answers AcceptedAnswer[]
 
   @@unique([gameId, order])

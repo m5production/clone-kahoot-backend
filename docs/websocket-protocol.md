@@ -20,18 +20,18 @@ Heartbeat: серверный ping каждые 30 с; без pong — terminate
 | `SHOW_ANSWERS` | `null` | ведущий | из `question_closed` → `ANSWERS_REVEALED` + `SESSION_STATE` всем |
 | `SHOW_WINNERS` | `null` | ведущий | после ответов на последний вопрос → `WINNERS` + `SESSION_ENDED` всем |
 | `END_SESSION` | `null` | ведущий | досрочное завершение → `SESSION_ENDED` всем, комната удаляется |
-| `ANSWER_QUESTION` | `{questionId, answer}` | игрок | ответ на открытый вопрос (1 раз, ≤100 символов, непустой после trim — BR-63; сравнение по нормализованной строке — BR-64) → `ANSWER_ACCEPTED` игроку, `SESSION_STATE` всем |
+| `ANSWER_QUESTION` | `{questionId, answer}` | игрок | ответ на открытый вопрос (1 раз, ≤100 символов, непустой после trim — BR-63; сравнение по нормализованной строке — BR-64; после закрытия/`questionEndsAt` — `FAULT` — BR-62) → `ANSWER_ACCEPTED` игроку, `SESSION_STATE` всем |
 
 ## События сервера → клиентам
 
 | type | payload |
 | --- | --- |
 | `JOINED_SESSION` | `{role: "host"\|"player", sessionId}` — только отправителю JOIN_SESSION |
-| `SESSION_STATE` | `{sessionId, gameId, quizTitle, state, hostConnected, players: [{id,name,bgColor,connected,answered}], question: {id,text,img,number,total} \| null}` — без текстов и оценок ответов; `question: null` в лобби |
+| `SESSION_STATE` | `{sessionId, gameId, quizTitle, state, hostConnected, players: [{id,name,bgColor,connected,answered}], question: {id,text,img,number,total,endsAt} \| null, serverNow}` — без текстов и оценок ответов; `question: null` в лобби. `endsAt`/`serverNow` — ms по серверным часам для синхронного отсчёта (NFR-P6); клиент считает `remaining = endsAt - (Date.now() + offset)`, где `offset = serverNow - Date.now()` |
 | `ANSWER_ACCEPTED` | `{questionId, text}` — только ответившему игроку |
-| `QUESTION_CLOSED` | `{questionId}` — всем; в т.ч. при автозакрытии, когда ответили все игроки в сети (BR-61) |
-| `ANSWERS_REVEALED` | `{questionId, acceptedAnswers: [string], answers: [{playerId,playerName,text\|null,isCorrect}]}` |
-| `WINNERS` | `{standings: [{id,name,score}]}` — отсортировано по score |
+| `QUESTION_CLOSED` | `{questionId}` — всем; в т.ч. при автозакрытии, когда ответили все игроки в сети или истёк таймер `timeLimitSec` (BR-61) |
+| `ANSWERS_REVEALED` | `{questionId, acceptedAnswers: [string], answers: [{playerId,playerName,text\|null,isCorrect,points}]}` — `points` по BR-70: `round(1000 * (1 - t / (2T)))` для верного ответа, иначе 0 |
+| `WINNERS` | `{standings: [{place,id,name,score,correctCount}]}` — место по убыванию score, ничья разбирается меньшим суммарным временем верных ответов; полные ничьи делят место (BR-72/BR-73) |
 | `SESSION_ENDED` | `{reason: "finished" \| "host_ended" \| "host_timeout"}` |
 | `FAULT` | `{code, message}` — ответ только отправителю |
 

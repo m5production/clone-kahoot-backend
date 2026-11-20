@@ -30,8 +30,22 @@ const prismaStub = {
   },
   question: {
     findMany: async () => [
-      { id: 'q1', text: 'First?', img: null, order: 1, answers: [{ text: 'yes' }] },
-      { id: 'q2', text: 'Second?', img: null, order: 2, answers: [{ text: 'no' }] },
+      {
+        id: 'q1',
+        text: 'First?',
+        img: null,
+        order: 1,
+        timeLimitSec: 20,
+        answers: [{ text: 'yes' }],
+      },
+      {
+        id: 'q2',
+        text: 'Second?',
+        img: null,
+        order: 2,
+        timeLimitSec: 20,
+        answers: [{ text: 'no' }],
+      },
     ],
   },
   user: {
@@ -42,6 +56,9 @@ const prismaStub = {
     },
   },
 }
+
+// tests that swap question.findMany must restore this afterwards
+const defaultQuestionFindMany = prismaStub.question.findMany
 
 const setup = (hostGraceSeconds = 300) => {
   const configStub = { get: () => ({ hostGraceSeconds }) }
@@ -131,7 +148,10 @@ test('session lifecycle: lobby -> questions -> winners -> finished', async () =>
   // next past the last question is rejected; show winners instead
   fault(() => service.nextQuestion(host as unknown as WebSocket))
   service.showWinners(host as unknown as WebSocket)
-  assert.equal(host.last('WINNERS')!.payload.standings[0].score, 2)
+  const win = host.last('WINNERS')!.payload.standings[0]
+  assert.equal(win.place, 1)
+  assert.equal(win.correctCount, 2)
+  assert.ok(win.score > 0 && win.score <= 2000)
   assert.equal(host.last('SESSION_ENDED')!.payload.reason, 'finished')
   assert.equal(service.isSessionRunning('game-1'), false)
 
@@ -257,9 +277,23 @@ test('answers are compared after trim+lowercase normalization (BR-63, BR-64)', a
     title: 'x',
   })
   prismaStub.question.findMany = async () => [
-    { id: 'q1', text: 'Capital?', img: null, order: 1, answers: [{ text: 'Paris' }] },
-    { id: 'q2', text: 'Tree?', img: null, order: 2, answers: [{ text: 'ёлка' }] },
-    { id: 'q3', text: 'Two words?', img: null, order: 3, answers: [{ text: 'a b' }] },
+    {
+      id: 'q1',
+      text: 'Capital?',
+      img: null,
+      order: 1,
+      timeLimitSec: 20,
+      answers: [{ text: 'Paris' }],
+    },
+    { id: 'q2', text: 'Tree?', img: null, order: 2, timeLimitSec: 20, answers: [{ text: 'ёлка' }] },
+    {
+      id: 'q3',
+      text: 'Two words?',
+      img: null,
+      order: 3,
+      timeLimitSec: 20,
+      answers: [{ text: 'a b' }],
+    },
   ]
   const { service, host, player, fault } = setup()
   const { sessionId } = await service.createSession('game-1', 'host-1')
@@ -291,4 +325,153 @@ test('answers are compared after trim+lowercase normalization (BR-63, BR-64)', a
   // BR-64: inner whitespace is preserved
   service.answerQuestion(player as unknown as WebSocket, 'q3', 'a  b')
   assert.equal(stored.answers[2].isCorrect, false)
+
+  prismaStub.question.findMany = defaultQuestionFindMany
+})
+
+test('scoreAnswer: BR-70 boundaries (t=0 -> 1000, t=T -> 500)', async () => {
+  const { scoreAnswer } = await import('../src/modules/active-game/active-game.service')
+  assert.equal(scoreAnswer(0, 20), 1000)
+  assert.equal(scoreAnswer(-500, 20), 1000) // clock skew is clamped, not overpaid
+  assert.equal(scoreAnswer(10_000, 20), 750) // half of the time -> 750
+  assert.equal(scoreAnswer(20_000, 20), 500)
+  assert.equal(scoreAnswer(25_000, 20), 500) // beyond the limit stays at the floor
+})
+
+test('points are stored and revealed; a late answer is rejected (BR-62, BR-70)', async () => {
+  const realNow = Date.now
+  try {
+    const t0 = 1_000_000
+    Date.now = () => t0
+    const { service, host, player, fault } = setup()
+    const { sessionId } = await service.createSession('game-1', 'host-1')
+    await service.joinSession(host as unknown as WebSocket, sessionId)
+    await service.joinSession(player as unknown as WebSocket, sessionId)
+    service.startGame(host as unknown as WebSocket)
+
+    Date.now = () => t0 + 2000 // answers 2 s in on a 20 s question
+    service.answerQuestion(player as unknown as WebSocket, 'q1', 'yes')
+    // biome-ignore lint/complexity/useLiteralKeys: reaching into private state to verify scoring
+    const stored = service['rooms'].get(sessionId)!.players.get('player-1')!
+    assert.equal(stored.answers[0].responseTimeMs, 2000)
+    assert.equal(stored.answers[0].points, 950) // 1000 * (1 - 2000/40000)
+
+    // the question auto-closed; the reveal carries the points
+    service.showAnswers(host as unknown as WebSocket)
+    const revealed = player.last('ANSWERS_REVEALED')!.payload
+    assert.equal(revealed.answers[0].points, 950)
+
+    Date.now = () => t0 + 5000
+    service.nextQuestion(host as unknown as WebSocket)
+
+    // an answer stamped after questionEndsAt is refused (BR-62)
+    Date.now = () => t0 + 5000 + 20_000 + 1
+    const { code } = fault(() => service.answerQuestion(player as unknown as WebSocket, 'q2', 'no'))
+    assert.equal(code, 'BAD_REQUEST')
+  } finally {
+    Date.now = realNow
+  }
+})
+
+test('the question timer auto-closes and SESSION_STATE carries endsAt + serverNow', async () => {
+  prismaStub.question.findMany = async () => [
+    { id: 'q1', text: 'Fast?', img: null, order: 1, timeLimitSec: 1, answers: [{ text: 'yes' }] },
+    { id: 'q2', text: 'Second?', img: null, order: 2, timeLimitSec: 20, answers: [{ text: 'no' }] },
+  ]
+  const { service, host, player } = setup()
+  const { sessionId } = await service.createSession('game-1', 'host-1')
+  await service.joinSession(host as unknown as WebSocket, sessionId)
+  await service.joinSession(player as unknown as WebSocket, sessionId)
+  service.startGame(host as unknown as WebSocket)
+
+  const state = player.last('SESSION_STATE')!.payload
+  assert.ok(state.question.endsAt > state.serverNow)
+  assert.ok(state.question.endsAt - state.serverNow <= 1000)
+
+  await new Promise((resolve) => setTimeout(resolve, 1200))
+  assert.equal(player.last('QUESTION_CLOSED')!.payload.questionId, 'q1')
+  assert.equal(player.last('SESSION_STATE')!.payload.state, 'question_closed')
+
+  prismaStub.question.findMany = defaultQuestionFindMany
+})
+
+test('standings: score desc, then total correct time asc (BR-72)', async () => {
+  const realNow = Date.now
+  try {
+    const t0 = 1_000_000
+    Date.now = () => t0
+    const { service, host, player } = setup()
+    const p2 = new FakeSocket()
+    service.registerClient(p2 as unknown as WebSocket, 'player-2')
+    const { sessionId } = await service.createSession('game-1', 'host-1')
+    await service.joinSession(host as unknown as WebSocket, sessionId)
+    await service.joinSession(player as unknown as WebSocket, sessionId)
+    await service.joinSession(p2 as unknown as WebSocket, sessionId)
+    service.startGame(host as unknown as WebSocket)
+
+    // both are right on q1: player-1 is faster
+    Date.now = () => t0 + 1000
+    service.answerQuestion(player as unknown as WebSocket, 'q1', 'yes')
+    Date.now = () => t0 + 4000
+    service.answerQuestion(p2 as unknown as WebSocket, 'q1', 'yes')
+    service.showAnswers(host as unknown as WebSocket)
+    service.nextQuestion(host as unknown as WebSocket)
+
+    // q2 opens "now" (t0 + 4000): both answer 1 s in — equal points, but
+    // player-1's total correct time is still lower
+    Date.now = () => t0 + 5000
+    service.answerQuestion(player as unknown as WebSocket, 'q2', 'no')
+    service.answerQuestion(p2 as unknown as WebSocket, 'q2', 'no')
+    service.showAnswers(host as unknown as WebSocket)
+    service.showWinners(host as unknown as WebSocket)
+
+    const standings = host.last('WINNERS')!.payload.standings
+    assert.deepEqual(
+      standings.map((s: any) => [s.place, s.id, s.score, s.correctCount]),
+      [
+        [1, 'player-1', 1950, 2], // 975 + 975 — faster on q1
+        [2, 'player-2', 1875, 2], // 900 + 975
+      ],
+    )
+  } finally {
+    Date.now = realNow
+  }
+})
+
+test('standings: a full tie shares the place (BR-73)', async () => {
+  const realNow = Date.now
+  try {
+    const t0 = 1_000_000
+    Date.now = () => t0
+    const { service, host, player } = setup()
+    const p2 = new FakeSocket()
+    service.registerClient(p2 as unknown as WebSocket, 'player-2')
+    const { sessionId } = await service.createSession('game-1', 'host-1')
+    await service.joinSession(host as unknown as WebSocket, sessionId)
+    await service.joinSession(player as unknown as WebSocket, sessionId)
+    await service.joinSession(p2 as unknown as WebSocket, sessionId)
+    service.startGame(host as unknown as WebSocket)
+
+    // identical response times -> identical points and identical tie-break
+    Date.now = () => t0 + 2000
+    service.answerQuestion(player as unknown as WebSocket, 'q1', 'yes')
+    service.answerQuestion(p2 as unknown as WebSocket, 'q1', 'yes')
+    service.showAnswers(host as unknown as WebSocket)
+    service.nextQuestion(host as unknown as WebSocket)
+
+    Date.now = () => t0 + 4000 // q2 opened at t0 + 2000 -> 2 s in again
+    service.answerQuestion(player as unknown as WebSocket, 'q2', 'no')
+    service.answerQuestion(p2 as unknown as WebSocket, 'q2', 'no')
+    service.showAnswers(host as unknown as WebSocket)
+    service.showWinners(host as unknown as WebSocket)
+
+    const standings = host.last('WINNERS')!.payload.standings
+    assert.deepEqual(
+      standings.map((s: any) => s.place),
+      [1, 1],
+    )
+    assert.equal(standings[0].score, standings[1].score)
+  } finally {
+    Date.now = realNow
+  }
 })

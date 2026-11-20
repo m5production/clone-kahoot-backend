@@ -8,6 +8,7 @@ export interface QuestionDto {
   gameId: string
   text: string
   img?: string | null
+  timeLimitSec?: number
 }
 
 export type QuestionWithAnswersCount = Question & { answersCount: number }
@@ -64,6 +65,7 @@ export class QuestionsService {
           gameId: dto.gameId,
           text: dto.text,
           img: dto.img ?? null,
+          timeLimitSec: dto.timeLimitSec,
           order: (last?.order ?? 0) + 1,
         },
         include: answersCountInclude,
@@ -81,13 +83,17 @@ export class QuestionsService {
   async update(
     id: string,
     userId: string,
-    dto: { text: string; img?: string | null },
+    dto: { text: string; img?: string | null; timeLimitSec?: number },
   ): Promise<QuestionWithAnswersCount> {
     const question = await this.get(id, userId)
     this.activeGame.assertQuizEditable(question.gameId)
     const updated = await this.prisma.question.update({
       where: { id },
-      data: { text: dto.text, img: dto.img ?? question.img },
+      data: {
+        text: dto.text,
+        img: dto.img ?? question.img,
+        timeLimitSec: dto.timeLimitSec ?? question.timeLimitSec,
+      },
       include: answersCountInclude,
     })
     await this.games.touch(question.gameId)

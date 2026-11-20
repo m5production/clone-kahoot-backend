@@ -16,7 +16,7 @@ User ─┬─< Session        (сессии: хеш токена, expiresAt, re
 - `Game`: `id`, `adminId` → `User` cascade, `title` (`VarChar(80)`, обязательное —
   существующие строки добиты «Quiz #N»), `createdAt`, `updatedAt` (`@updatedAt`;
   сервис трогает его и при изменениях вопросов/ответов — BR-45).
-- `Question`: `id`, `gameId` → cascade, `order`, `text` (`VarChar(300)`), `img`
+- `Question`: `id`, `gameId` → cascade, `order`, `text` (`VarChar(300)`), `img`, `timeLimitSec` (`SmallInt`, CHECK ∈ {10,20,30,60,90,120}, default 20)
   (nullable); unique `(gameId, order)`. Пустой `text` допускается — редактор
   создаёт вопрос-плейсхолдер (миграция `20261119123000`).
 - `AcceptedAnswer`: `id`, `questionId` → cascade, `text` (`VarChar(100)`,
