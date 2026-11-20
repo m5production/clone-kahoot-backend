@@ -22,7 +22,7 @@ const main = async () => {
   const game = await prisma.game.upsert({
     where: { id: 'dev-seed-game' },
     update: {},
-    create: { id: 'dev-seed-game', adminId: host.id },
+    create: { id: 'dev-seed-game', adminId: host.id, title: 'Dev quiz' },
   })
 
   const questionData = [
