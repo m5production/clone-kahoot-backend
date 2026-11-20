@@ -28,7 +28,7 @@ SIGTERM → graceful shutdown (таймаут 10 с в `main.ts`).
 - `amvera.yml` — конфигурация площадки (сборка из Dockerfile).
 - Production-переменные — через секреты площадки: `DB_HOST`, `DB_PORT`,
   `DB_USER`, `DB_PASSWORD`, `DB_NAME`, `DB_SSLMODE`,
-  `ALLOWED_ORIGINS=https://dimetriyo.github.io`, `TRUST_PROXY=true`
+  `ALLOWED_ORIGINS=https://m5production.github.io`, `TRUST_PROXY=true`
   (за прокси), `NODE_ENV=production`.
 - Миграции: `yarn prisma-migrate-prod` (`migrate deploy`) — отдельным шагом,
   не при старте приложения.
