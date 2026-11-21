@@ -36,6 +36,8 @@ const prismaStub = {
         img: null,
         order: 1,
         timeLimitSec: 20,
+        type: 'open',
+        options: [],
         answers: [{ text: 'yes' }],
       },
       {
@@ -44,6 +46,8 @@ const prismaStub = {
         img: null,
         order: 2,
         timeLimitSec: 20,
+        type: 'open',
+        options: [],
         answers: [{ text: 'no' }],
       },
     ],
@@ -288,15 +292,28 @@ test('answers are compared after trim+lowercase normalization (BR-63, BR-64)', a
       img: null,
       order: 1,
       timeLimitSec: 20,
+      type: 'open',
+      options: [],
       answers: [{ text: 'Paris' }],
     },
-    { id: 'q2', text: 'Tree?', img: null, order: 2, timeLimitSec: 20, answers: [{ text: 'ёлка' }] },
+    {
+      id: 'q2',
+      text: 'Tree?',
+      img: null,
+      order: 2,
+      timeLimitSec: 20,
+      type: 'open',
+      options: [],
+      answers: [{ text: 'ёлка' }],
+    },
     {
       id: 'q3',
       text: 'Two words?',
       img: null,
       order: 3,
       timeLimitSec: 20,
+      type: 'open',
+      options: [],
       answers: [{ text: 'a b' }],
     },
   ]
@@ -380,8 +397,26 @@ test('points are stored and revealed; a late answer is rejected (BR-62, BR-70)',
 
 test('the question timer auto-closes and SESSION_STATE carries endsAt + serverNow', async () => {
   prismaStub.question.findMany = async () => [
-    { id: 'q1', text: 'Fast?', img: null, order: 1, timeLimitSec: 1, answers: [{ text: 'yes' }] },
-    { id: 'q2', text: 'Second?', img: null, order: 2, timeLimitSec: 20, answers: [{ text: 'no' }] },
+    {
+      id: 'q1',
+      text: 'Fast?',
+      img: null,
+      order: 1,
+      timeLimitSec: 1,
+      type: 'open',
+      options: [],
+      answers: [{ text: 'yes' }],
+    },
+    {
+      id: 'q2',
+      text: 'Second?',
+      img: null,
+      order: 2,
+      timeLimitSec: 20,
+      type: 'open',
+      options: [],
+      answers: [{ text: 'no' }],
+    },
   ]
   const { service, host, player } = setup()
   const { sessionId } = await service.createSession('game-1', 'host-1')
@@ -562,4 +597,165 @@ test('a host-ended session is recorded as aborted (BR-80)', async () => {
 
   const finished = calls.find((c) => c.method === 'finishRecord')!
   assert.equal(finished.input.status, 'aborted')
+})
+
+const choiceQuiz = () => {
+  prismaStub.question.findMany = async () => [
+    {
+      id: 'q1',
+      text: 'Pick a color?',
+      img: null,
+      order: 1,
+      timeLimitSec: 20,
+      type: 'choice',
+      options: [
+        { id: 'o1', text: 'red', isCorrect: false },
+        { id: 'o2', text: 'blue', isCorrect: true },
+        { id: 'o3', text: 'yellow', isCorrect: false },
+      ],
+      answers: [],
+    },
+    {
+      id: 'q2',
+      text: 'Open?',
+      img: null,
+      order: 2,
+      timeLimitSec: 20,
+      type: 'open',
+      options: [],
+      answers: [{ text: 'yes' }],
+    },
+  ]
+}
+
+test('choice questions: options broadcast without isCorrect, answers by optionId (BR-87, BR-88)', async () => {
+  choiceQuiz()
+  try {
+    const { service, host, player, fault } = setup()
+    const { sessionId } = await service.createSession('game-1', 'host-1')
+    await service.joinSession(host as unknown as WebSocket, sessionId)
+    await service.joinSession(player as unknown as WebSocket, sessionId)
+    service.startGame(host as unknown as WebSocket)
+
+    // BR-88: option texts reach the clients during the question, isCorrect does not
+    const state = player.last('SESSION_STATE')!.payload
+    assert.equal(state.question.type, 'choice')
+    assert.deepEqual(state.question.options, [
+      { id: 'o1', text: 'red' },
+      { id: 'o2', text: 'blue' },
+      { id: 'o3', text: 'yellow' },
+    ])
+
+    // an unknown option id is refused before it can count as an answer
+    const { code } = fault(() =>
+      service.answerQuestion(player as unknown as WebSocket, 'q1', undefined, 'nope'),
+    )
+    assert.equal(code, 'BAD_REQUEST')
+
+    service.answerQuestion(player as unknown as WebSocket, 'q1', undefined, 'o2')
+    const accepted = player.last('ANSWER_ACCEPTED')!.payload
+    assert.deepEqual(accepted, { questionId: 'q1', optionId: 'o2', text: 'blue' })
+
+    // the second pick is refused; the first one counts (BR-63)
+    fault(() => service.answerQuestion(player as unknown as WebSocket, 'q1', undefined, 'o1'))
+
+    service.showAnswers(host as unknown as WebSocket)
+    const revealed = player.last('ANSWERS_REVEALED')!.payload
+    assert.equal(revealed.correctOptionId, 'o2')
+    assert.equal(revealed.answers[0].optionId, 'o2')
+    assert.equal(revealed.answers[0].text, 'blue')
+    assert.equal(revealed.answers[0].isCorrect, true)
+    assert.ok(revealed.answers[0].points >= 500 && revealed.answers[0].points <= 1000)
+
+    // the mixed quiz continues into an open question unchanged
+    service.nextQuestion(host as unknown as WebSocket)
+    service.answerQuestion(player as unknown as WebSocket, 'q2', 'yes')
+    service.showAnswers(host as unknown as WebSocket)
+    const openRevealed = player.last('ANSWERS_REVEALED')!.payload
+    assert.deepEqual(openRevealed.acceptedAnswers, ['yes'])
+    assert.ok(!('optionId' in openRevealed.answers[0]))
+    assert.ok(!('correctOptionId' in openRevealed))
+  } finally {
+    prismaStub.question.findMany = defaultQuestionFindMany
+  }
+})
+
+test('a wrong option pick is incorrect and scores 0 (BR-87, BR-70)', async () => {
+  choiceQuiz()
+  try {
+    const { service, host, player } = setup()
+    const { sessionId } = await service.createSession('game-1', 'host-1')
+    await service.joinSession(host as unknown as WebSocket, sessionId)
+    await service.joinSession(player as unknown as WebSocket, sessionId)
+    service.startGame(host as unknown as WebSocket)
+
+    service.answerQuestion(player as unknown as WebSocket, 'q1', undefined, 'o1')
+    // biome-ignore lint/complexity/useLiteralKeys: reaching into private state to verify stored answers
+    const stored = service['rooms'].get(sessionId)!.players.get('player-1')!
+    assert.equal(stored.answers[0].optionId, 'o1')
+    assert.equal(stored.answers[0].isCorrect, false)
+    assert.equal(stored.answers[0].points, 0)
+
+    service.showAnswers(host as unknown as WebSocket)
+    const revealed = player.last('ANSWERS_REVEALED')!.payload
+    assert.equal(revealed.answers[0].optionId, 'o1')
+    assert.equal(revealed.answers[0].isCorrect, false)
+  } finally {
+    prismaStub.question.findMany = defaultQuestionFindMany
+  }
+})
+
+test('a reconnecting player gets the optionId echo (BR-58)', async () => {
+  choiceQuiz()
+  try {
+    const { service, host, player } = setup()
+    const { sessionId } = await service.createSession('game-1', 'host-1')
+    await service.joinSession(host as unknown as WebSocket, sessionId)
+    await service.joinSession(player as unknown as WebSocket, sessionId)
+    service.startGame(host as unknown as WebSocket)
+    service.answerQuestion(player as unknown as WebSocket, 'q1', undefined, 'o2')
+
+    service.unregisterClient(player as unknown as WebSocket)
+    player.clear()
+    service.registerClient(player as unknown as WebSocket, 'player-1')
+    await service.joinSession(player as unknown as WebSocket, sessionId)
+    const echo = player.last('ANSWER_ACCEPTED')!.payload
+    assert.deepEqual(echo, { questionId: 'q1', optionId: 'o2', text: 'blue' })
+  } finally {
+    prismaStub.question.findMany = defaultQuestionFindMany
+  }
+})
+
+test('a quiz with an invalid choice question cannot start (D-15)', async () => {
+  prismaStub.question.findMany = async () => [
+    {
+      id: 'q1',
+      text: 'Pick?',
+      img: null,
+      order: 1,
+      timeLimitSec: 20,
+      type: 'choice',
+      options: [{ id: 'o1', text: 'lonely', isCorrect: true }],
+      answers: [],
+    },
+    {
+      id: 'q2',
+      text: 'No correct',
+      img: null,
+      order: 2,
+      timeLimitSec: 20,
+      type: 'choice',
+      options: [
+        { id: 'o1', text: 'a', isCorrect: false },
+        { id: 'o2', text: 'b', isCorrect: false },
+      ],
+      answers: [],
+    },
+  ]
+  try {
+    const { service } = setup()
+    await assert.rejects(service.createSession('game-1', 'host-1'), /not ready/)
+  } finally {
+    prismaStub.question.findMany = defaultQuestionFindMany
+  }
 })

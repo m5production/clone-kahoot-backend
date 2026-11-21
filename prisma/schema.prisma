@@ -53,10 +53,27 @@ model Question {
   text    String           @db.VarChar(300)
   // BR-48: time to answer; allowed values are enforced by a CHECK in the migration
   timeLimitSec Int            @default(20) @db.SmallInt
+  // D-10: 'open' (free text) or 'choice' (2-4 options); a CHECK in the migration
+  type    String              @default("open") @db.VarChar(16)
   answers AcceptedAnswer[]
+  options QuestionOption[]
 
   @@unique([gameId, order])
   @@index([gameId])
+}
+
+// D-11: an answer option of a 'choice' question with an explicit order and a
+// correct mark; a question holds options or accepted answers, never both (D-12)
+model QuestionOption {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  order      Int
+  text       String   @db.VarChar(100)
+  isCorrect  Boolean  @default(false)
+
+  @@unique([questionId, order])
+  @@index([questionId])
 }
 
 model AcceptedAnswer {
@@ -95,7 +112,11 @@ model SessionQuestion {
   text            String          @db.VarChar(300)
   img             String?         @db.VarChar(2048)
   timeLimitSec    Int             @db.SmallInt
+  // D-10: 'open' | 'choice' snapshot of the question type played
+  type            String          @default("open") @db.VarChar(16)
   acceptedAnswers Json
+  // choice questions also snapshot their options: [{text, isCorrect}]
+  options         Json?
   answers         SessionAnswer[]
 
   @@index([sessionId])

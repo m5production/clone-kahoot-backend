@@ -14,6 +14,9 @@ interface QuestionRecordInput {
   text: string
   img: string | null
   timeLimitSec: number
+  type: 'open' | 'choice'
+  /** choice questions snapshot their options: [{text, isCorrect}] */
+  options: { text: string; isCorrect: boolean }[] | null
   acceptedAnswers: string[]
 }
 
@@ -87,6 +90,8 @@ export class HistoryService implements OnModuleInit {
             text: q.text,
             img: q.img,
             timeLimitSec: q.timeLimitSec,
+            type: q.type,
+            options: q.options ?? undefined,
             acceptedAnswers: q.acceptedAnswers,
           })),
         },
@@ -255,6 +260,8 @@ export class HistoryService implements OnModuleInit {
         text: q.text,
         img: q.img,
         timeLimitSec: q.timeLimitSec,
+        type: q.type as 'open' | 'choice',
+        options: (q.options as { text: string; isCorrect: boolean }[] | null) ?? null,
         acceptedAnswers: q.acceptedAnswers as string[],
         answers: players.map((p) => {
           const found = p.answers.find((a) => a.sessionQuestionId === q.id)

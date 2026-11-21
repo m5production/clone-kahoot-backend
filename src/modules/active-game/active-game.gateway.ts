@@ -11,7 +11,7 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets'
 import { plainToInstance } from 'class-transformer'
-import { IsNotEmpty, IsString, MaxLength, validateSync } from 'class-validator'
+import { IsNotEmpty, IsOptional, IsString, MaxLength, validateSync } from 'class-validator'
 import type { WebSocket, WebSocketServer as WsServer } from 'ws'
 import { WsCommandLimiter } from '../../common/ws-command-limiter'
 import type { AppConfig } from '../../config/configuration'
@@ -29,9 +29,15 @@ class AnswerQuestionDto {
   @IsNotEmpty()
   questionId!: string
 
+  // open questions answer with a text (≤100); choice questions with an optionId
+  @IsOptional()
   @IsString()
   @MaxLength(100)
-  answer!: string
+  answer?: string
+
+  @IsOptional()
+  @IsString()
+  optionId?: string
 }
 
 const KNOWN_EVENTS = new Set([
@@ -178,7 +184,7 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
   answerQuestion(@ConnectedSocket() client: WebSocket, @MessageBody() body: unknown): void {
     this.run(client, () => {
       const dto = parseBody(AnswerQuestionDto, body)
-      this.activeGame.answerQuestion(client, dto.questionId, dto.answer)
+      this.activeGame.answerQuestion(client, dto.questionId, dto.answer, dto.optionId)
     })
   }
 

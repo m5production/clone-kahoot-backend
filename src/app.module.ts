@@ -10,6 +10,7 @@ import { AuthModule } from './modules/auth/auth.module'
 import { GamesModule } from './modules/games/games.module'
 import { HealthModule } from './modules/health/health.module'
 import { HistoryModule } from './modules/history/history.module'
+import { OptionsModule } from './modules/options/options.module'
 import { QuestionsModule } from './modules/questions/questions.module'
 import { UsersModule } from './modules/users/users.module'
 
@@ -22,6 +23,7 @@ import { UsersModule } from './modules/users/users.module'
     GamesModule,
     QuestionsModule,
     AcceptedAnswersModule,
+    OptionsModule,
     ActiveGameModule,
     HealthModule,
     HistoryModule,

@@ -30,6 +30,8 @@ interface PlayerState {
   bgColor: string
   answers: {
     questionId: string
+    /** choice questions only: the picked QuestionOption id (D-11) */
+    optionId: string | null
     text: string
     isCorrect: boolean
     points: number
@@ -43,6 +45,10 @@ interface QuestionSnapshot {
   text: string
   img: string | null
   timeLimitSec: number
+  // D-10: 'open' checks the normalized text, 'choice' checks the picked option
+  type: 'open' | 'choice'
+  /** choice questions only, in display order (D-13); isCorrect stays server-side until the reveal (BR-88) */
+  options: { id: string; text: string; isCorrect: boolean }[]
   acceptedTexts: string[]
   acceptedNormalized: Set<string>
   /** id of the SessionQuestion history row this snapshot was saved as */
@@ -92,6 +98,9 @@ export interface SessionStateMessage {
     number: number
     total: number
     endsAt: number
+    type: 'open' | 'choice'
+    /** choice questions only: options without isCorrect (BR-88) */
+    options?: { id: string; text: string }[]
   } | null
   /** NFR-P6: the server clock, so all clients show the same countdown */
   serverNow: number
@@ -201,14 +210,26 @@ export class ActiveGameService {
     const questions = await this.prisma.question.findMany({
       where: { gameId },
       orderBy: { order: 'asc' },
-      include: { answers: true },
+      include: { answers: true, options: { orderBy: { order: 'asc' } } },
     })
-    // BR-49: a quiz is launchable only when every question has text and answers
-    const quizNotReady =
-      questions.length === 0 || questions.some((q) => !q.text.trim() || q.answers.length === 0)
+    // BR-49 + D-15: a quiz is launchable when every question has text and its
+    // own kind of answers — open needs ≥1 accepted answer, choice needs 2-4
+    // options with exactly one correct (BR-86)
+    const questionReady = (q: (typeof questions)[number]): boolean => {
+      if (!q.text.trim()) return false
+      if (q.type === 'choice') {
+        return (
+          q.options.length >= 2 &&
+          q.options.length <= 4 &&
+          q.options.filter((o) => o.isCorrect).length === 1
+        )
+      }
+      return q.answers.length > 0
+    }
+    const quizNotReady = questions.length === 0 || questions.some((q) => !questionReady(q))
     if (quizNotReady) {
       throw new BadRequestException(
-        'The quiz is not ready: every question needs text and at least one accepted answer',
+        'The quiz is not ready: every question needs text and valid answers',
       )
     }
     const sessionId = randomUUID()
@@ -229,6 +250,8 @@ export class ActiveGameService {
         text: q.text,
         img: q.img,
         timeLimitSec: q.timeLimitSec,
+        type: q.type as 'open' | 'choice',
+        options: q.options.map((o) => ({ id: o.id, text: o.text, isCorrect: o.isCorrect })),
         acceptedTexts: q.answers.map((a) => a.text),
         acceptedNormalized: new Set(q.answers.map((a) => normalizeAnswer(a.text))),
       })),
@@ -253,6 +276,11 @@ export class ActiveGameService {
           text: q.text,
           img: q.img,
           timeLimitSec: q.timeLimitSec,
+          type: q.type,
+          options:
+            q.type === 'choice'
+              ? q.options.map(({ text, isCorrect }) => ({ text, isCorrect }))
+              : null,
           acceptedAnswers: q.acceptedTexts,
         })),
       })
@@ -329,10 +357,13 @@ export class ActiveGameService {
         const question = room.questionIndex >= 0 ? room.questions[room.questionIndex] : undefined
         const given = question && existing.answers.find((a) => a.questionId === question.id)
         if (given) {
-          this.send(socket, 'ANSWER_ACCEPTED', {
-            questionId: question.id,
-            text: given.text,
-          })
+          this.send(
+            socket,
+            'ANSWER_ACCEPTED',
+            given.optionId
+              ? { questionId: question.id, optionId: given.optionId, text: given.text }
+              : { questionId: question.id, text: given.text },
+          )
         }
       } else {
         room.players.set(user.id, {
@@ -413,7 +444,7 @@ export class ActiveGameService {
     this.endRoom(room, 'host_ended')
   }
 
-  answerQuestion(socket: WebSocket, questionId: string, answer: string): void {
+  answerQuestion(socket: WebSocket, questionId: string, answer?: string, optionId?: string): void {
     const { room, userId } = this.requirePlayerRoom(socket)
     if (room.state !== 'question_open') {
       throw new GameFault('BAD_REQUEST', 'No question is open for answers')
@@ -434,22 +465,42 @@ export class ActiveGameService {
     if (player.answers.some((a) => a.questionId === questionId)) {
       throw new GameFault('CONFLICT', 'Question already answered')
     }
-    // BR-63: a blank answer (after trimming) is not accepted
-    const normalized = normalizeAnswer(answer)
-    if (!normalized) {
-      throw new GameFault('BAD_REQUEST', 'Answer must not be empty')
+    let text: string
+    let isCorrect: boolean
+    let pickedOptionId: string | null = null
+    if (question.type === 'choice') {
+      // BR-87: the player picks exactly one option; it is right only when marked
+      const option = question.options.find((o) => o.id === optionId)
+      if (!option) {
+        throw new GameFault('BAD_REQUEST', 'Unknown answer option')
+      }
+      text = option.text
+      isCorrect = option.isCorrect
+      pickedOptionId = option.id
+    } else {
+      // BR-63: a blank answer (after trimming) is not accepted
+      const normalized = normalizeAnswer(answer ?? '')
+      if (!normalized) {
+        throw new GameFault('BAD_REQUEST', 'Answer must not be empty')
+      }
+      text = answer as string
+      isCorrect = question.acceptedNormalized.has(normalized)
     }
     const responseTimeMs = receivedAt - room.questionStartedAt
-    const isCorrect = question.acceptedNormalized.has(normalized)
     player.answers.push({
       questionId,
-      text: answer,
+      optionId: pickedOptionId,
+      text,
       isCorrect,
       // BR-70/BR-71: speed-based points for a correct answer, 0 otherwise
       points: isCorrect ? scoreAnswer(responseTimeMs, question.timeLimitSec) : 0,
       responseTimeMs,
     })
-    this.send(socket, 'ANSWER_ACCEPTED', { questionId, text: answer })
+    this.send(
+      socket,
+      'ANSWER_ACCEPTED',
+      pickedOptionId ? { questionId, optionId: pickedOptionId, text } : { questionId, text },
+    )
     this.maybeCloseQuestion(room)
     this.broadcastSessionState(room)
   }
@@ -568,20 +619,30 @@ export class ActiveGameService {
 
   private answersRevealed(room: Room): unknown {
     const question = room.questions[room.questionIndex]
+    const answers = [...room.players.values()].map((player) => {
+      const found = player.answers.find((a) => a.questionId === question.id)
+      return {
+        playerId: player.id,
+        playerName: player.name,
+        text: found?.text ?? null,
+        isCorrect: found?.isCorrect ?? false,
+        points: found?.points ?? 0,
+        // choice questions report the picked option; open answers have none
+        ...(question.type === 'choice' ? { optionId: found?.optionId ?? null } : {}),
+      }
+    })
+    if (question.type === 'choice') {
+      return {
+        questionId: question.id,
+        correctOptionId: question.options.find((o) => o.isCorrect)?.id ?? null,
+        answers,
+      }
+    }
     return {
       questionId: question.id,
       // FR-67: accepted answers are always included, even when nobody was right
       acceptedAnswers: question.acceptedTexts,
-      answers: [...room.players.values()].map((player) => {
-        const found = player.answers.find((a) => a.questionId === question.id)
-        return {
-          playerId: player.id,
-          playerName: player.name,
-          text: found?.text ?? null,
-          isCorrect: found?.isCorrect ?? false,
-          points: found?.points ?? 0,
-        }
-      }),
+      answers,
     }
   }
 
@@ -677,6 +738,12 @@ export class ActiveGameService {
             number: room.questionIndex + 1,
             total: room.questions.length,
             endsAt: room.questionEndsAt,
+            type: question.type,
+            // BR-88: option texts are shown during the question; the correct
+            // mark is revealed only in ANSWERS_REVEALED
+            ...(question.type === 'choice'
+              ? { options: question.options.map(({ id, text }) => ({ id, text })) }
+              : {}),
           }
         : null,
       serverNow: Date.now(),

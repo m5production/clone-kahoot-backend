@@ -4,6 +4,7 @@ import { isUniqueViolation } from '../../common/prisma-error'
 import { PrismaService } from '../../database/prisma.service'
 import { ActiveGameService } from '../active-game/active-game.service'
 import { GamesService } from '../games/games.service'
+import type { QuestionType } from './question.constants'
 
 export interface QuestionDto {
   gameId: string
@@ -12,16 +13,22 @@ export interface QuestionDto {
   timeLimitSec?: number
 }
 
-export type QuestionWithAnswersCount = Question & { answersCount: number }
+export type QuestionWithAnswersCount = Question & {
+  answersCount: number
+  optionsCount: number
+}
 
-const answersCountInclude = { _count: { select: { answers: true } } } as const
+const answersCountInclude = {
+  _count: { select: { answers: true, options: true } },
+} as const
 
 const withAnswersCount = ({
   _count,
   ...question
-}: Question & { _count: { answers: number } }): QuestionWithAnswersCount => ({
+}: Question & { _count: { answers: number; options: number } }): QuestionWithAnswersCount => ({
   ...question,
   answersCount: _count.answers,
+  optionsCount: _count.options,
 })
 
 @Injectable()
@@ -84,21 +91,35 @@ export class QuestionsService {
   async update(
     id: string,
     userId: string,
-    dto: { text: string; img?: string | null; timeLimitSec?: number },
+    dto: { text: string; img?: string | null; timeLimitSec?: number; type?: QuestionType },
   ): Promise<QuestionWithAnswersCount> {
     const question = await this.get(id, userId)
     this.activeGame.assertQuizEditable(question.gameId)
-    const updated = await this.prisma.question.update({
-      where: { id },
-      data: {
-        text: dto.text,
-        // absent field keeps the stored value; explicit null clears it
-        img: dto.img === undefined ? question.img : dto.img,
-        timeLimitSec: dto.timeLimitSec ?? question.timeLimitSec,
-      },
-      include: answersCountInclude,
+    const type = dto.type ?? question.type
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const row = await tx.question.update({
+        where: { id },
+        data: {
+          text: dto.text,
+          // absent field keeps the stored value; explicit null clears it
+          img: dto.img === undefined ? question.img : dto.img,
+          timeLimitSec: dto.timeLimitSec ?? question.timeLimitSec,
+          type,
+        },
+        include: answersCountInclude,
+      })
+      // D-12: a question holds only the data of its own type — switching the
+      // type drops the now-inactive set in the same transaction
+      if (type !== question.type) {
+        if (type === 'choice') {
+          await tx.acceptedAnswer.deleteMany({ where: { questionId: id } })
+        } else {
+          await tx.questionOption.deleteMany({ where: { questionId: id } })
+        }
+      }
+      await tx.game.update({ where: { id: question.gameId }, data: { updatedAt: new Date() } })
+      return row
     })
-    await this.games.touch(question.gameId)
     return withAnswersCount(updated)
   }
 
