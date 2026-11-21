@@ -191,17 +191,7 @@ export class ActiveGameService {
     if (game.adminId !== hostId) {
       throw new ForbiddenException('Only the game owner can start it')
     }
-    const running = [...this.rooms.values()].find(
-      (room) => room.gameId === gameId || room.hostId === hostId,
-    )
-    if (running) {
-      // BR-51, FR-61: one session per quiz, one session per host; the response
-      // carries the existing session id so the host can return to it
-      throw new ConflictException({
-        message: 'A live session already exists',
-        sessionId: running.sessionId,
-      })
-    }
+    this.assertNoRunningRoom(gameId, hostId)
     const host = await this.prisma.user.findUnique({ where: { id: hostId } })
     if (!host) throw new NotFoundException('User was not found')
     const questions = await this.prisma.question.findMany({
@@ -242,6 +232,9 @@ export class ActiveGameService {
       sockets: new Map(),
       hostGraceTimer: null,
     }
+    // check and insert must stay in the same synchronous block — two
+    // concurrent requests could otherwise both pass the check above
+    this.assertNoRunningRoom(gameId, hostId)
     this.rooms.set(sessionId, room)
     // BR-80: the history row and the question snapshot are written up front;
     // a failed write must not stop the game, only leave the session unrecorded
@@ -268,6 +261,20 @@ export class ActiveGameService {
     // the host must join over WS before the grace expires
     this.startHostGrace(room)
     return { sessionId, joinPath: `/join/${sessionId}` }
+  }
+
+  /** BR-51, FR-61: one session per quiz, one session per host */
+  private assertNoRunningRoom(gameId: string, hostId: string): void {
+    const running = [...this.rooms.values()].find(
+      (room) => room.gameId === gameId || room.hostId === hostId,
+    )
+    if (running) {
+      // the response carries the existing session id so the host can return to it
+      throw new ConflictException({
+        message: 'A live session already exists',
+        sessionId: running.sessionId,
+      })
+    }
   }
 
   /** REST GET /api/sessions/:id — public summary for the /join/:id page (FR-73) */
