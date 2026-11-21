@@ -13,6 +13,9 @@ const main = async (): Promise<void> => {
   await app.listen(config.port, config.host)
   logger.log(`Server running on ${config.host}:${config.port}`)
 
+  // enableShutdownHooks (in createApp) already closes the app on these
+  // signals; the manual handlers exist for the force-exit timer, and
+  // calling close() a second time is safe
   for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.on(signal, () => {
       logger.log(`Received ${signal}, shutting down`)

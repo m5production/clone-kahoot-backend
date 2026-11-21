@@ -2,7 +2,7 @@
   "name": "clone-kahoot-backend",
   "packageManager": "yarn@1.22.22",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/main.js",
   "license": "MIT",
   "scripts": {
     "build": "nest build",

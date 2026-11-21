@@ -131,4 +131,5 @@ model SessionAnswer {
   points            Int
 
   @@unique([sessionPlayerId, sessionQuestionId])
+  @@index([sessionQuestionId])
 }
