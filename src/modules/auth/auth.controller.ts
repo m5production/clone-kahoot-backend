@@ -1,8 +1,8 @@
 import { Body, Controller, Get, HttpCode, Post, UseGuards } from '@nestjs/common'
 import { Transform } from 'class-transformer'
 import { IsString, MaxLength, MinLength } from 'class-validator'
-import { CurrentUser, SessionToken } from '../../common/decorators/current-user.decorator'
-import { AuthGuard } from '../../common/guards/auth.guard'
+import { CurrentUser, SessionToken } from './current-user.decorator'
+import { AuthGuard } from './auth.guard'
 import { RateLimit } from '../../common/guards/rate-limit.guard'
 import { AuthService, type PublicUser } from './auth.service'
 

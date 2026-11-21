@@ -5,7 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common'
 import type { Request } from 'express'
-import { AuthService, type PublicUser } from '../../modules/auth/auth.service'
+import { AuthService, type PublicUser } from './auth.service'
 
 declare module 'express' {
   interface Request {

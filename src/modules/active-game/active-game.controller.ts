@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import { AuthGuard } from '../../common/guards/auth.guard'
+import { CurrentUser } from '../auth/current-user.decorator'
+import { AuthGuard } from '../auth/auth.guard'
 import type { PublicUser } from '../auth/auth.service'
 import { ActiveGameService, type SessionSummary } from './active-game.service'
 

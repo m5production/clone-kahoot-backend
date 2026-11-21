@@ -12,8 +12,8 @@ import {
 } from '@nestjs/common'
 import type { AcceptedAnswer } from '@prisma/client'
 import { IsNotEmpty, IsString, MaxLength } from 'class-validator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import { AuthGuard } from '../../common/guards/auth.guard'
+import { CurrentUser } from '../auth/current-user.decorator'
+import { AuthGuard } from '../auth/auth.guard'
 import type { PublicUser } from '../auth/auth.service'
 import { AcceptedAnswersService } from './accepted-answers.service'
 

@@ -2,8 +2,8 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@n
 import type { Game } from '@prisma/client'
 import { Transform } from 'class-transformer'
 import { ArrayMinSize, IsArray, IsString, Length } from 'class-validator'
-import { CurrentUser } from '../../common/decorators/current-user.decorator'
-import { AuthGuard } from '../../common/guards/auth.guard'
+import { CurrentUser } from '../auth/current-user.decorator'
+import { AuthGuard } from '../auth/auth.guard'
 import type { PublicUser } from '../auth/auth.service'
 import { GamesService, type GameSummary } from './games.service'
 
