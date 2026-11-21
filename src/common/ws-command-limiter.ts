@@ -4,8 +4,9 @@ type Bucket = { count: number; resetAt: number }
 
 /**
  * Per-connection fixed-window limiter for game commands. A socket is the
- * identity: a reconnecting client starts a fresh bucket. Disabled in tests,
- * same as the HTTP RateLimit guard.
+ * identity: a reconnecting client starts a fresh bucket. The caller decides
+ * whether it is enabled — tests construct it with enabled=false, same as
+ * the HTTP RateLimit guard is bypassed in test env.
  */
 export class WsCommandLimiter {
   private readonly buckets = new WeakMap<WebSocket, Bucket>()
@@ -13,7 +14,7 @@ export class WsCommandLimiter {
   constructor(
     private readonly limit: number,
     private readonly windowMs: number,
-    private readonly enabled = process.env.NODE_ENV !== 'test',
+    private readonly enabled: boolean,
   ) {}
 
   /** true — the command is within the limit; false — it must be rejected */

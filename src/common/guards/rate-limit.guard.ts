@@ -7,7 +7,9 @@ import {
   HttpStatus,
   mixin,
 } from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
 import type { Request } from 'express'
+import type { AppConfig } from '../../config/configuration'
 
 const buckets = new Map<string, { count: number; resetAt: number }>()
 
@@ -19,9 +21,11 @@ setInterval(() => {
 export const RateLimit = (limit: number, windowSeconds: number): Type<CanActivate> => {
   @Injectable()
   class RateLimitGuard implements CanActivate {
+    constructor(private readonly config: ConfigService) {}
+
     canActivate(context: ExecutionContext): boolean {
       // E2E/test environments issue many authenticated calls from one client
-      if (process.env.NODE_ENV === 'test') return true
+      if (this.config.getOrThrow<AppConfig>('app').nodeEnv === 'test') return true
       const req = context.switchToHttp().getRequest<Request>()
       const key = `${req.ip}:${req.path}`
       const now = Date.now()

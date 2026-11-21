@@ -60,7 +60,7 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
 
   // BR-adjacent hardening: a socket may send at most 30 commands per 10 s —
   // a normal game issues a handful per question, floods are rejected
-  private readonly commandLimiter = new WsCommandLimiter(30, 10_000)
+  private readonly commandLimiter: WsCommandLimiter
 
   @WebSocketServer()
   server!: WsServer
@@ -69,7 +69,11 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
     private readonly activeGame: ActiveGameService,
     private readonly auth: AuthService,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    // E2E/test environments flood the socket legitimately
+    const enabled = config.getOrThrow<AppConfig>('app').nodeEnv !== 'test'
+    this.commandLimiter = new WsCommandLimiter(30, 10_000, enabled)
+  }
 
   afterInit(server: WsServer): void {
     // the decorator options are static, so the configured payload limit is

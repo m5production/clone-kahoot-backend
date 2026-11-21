@@ -7,7 +7,7 @@ const client = () => ({}) as WebSocket
 
 describe('WsCommandLimiter', () => {
   it('allows commands within the window and rejects the flood', () => {
-    const limiter = new WsCommandLimiter(3, 10_000)
+    const limiter = new WsCommandLimiter(3, 10_000, true)
     const ws = client()
     assert.equal(limiter.hit(ws, 0), true)
     assert.equal(limiter.hit(ws, 1), true)
@@ -19,7 +19,7 @@ describe('WsCommandLimiter', () => {
   })
 
   it('limits each socket independently', () => {
-    const limiter = new WsCommandLimiter(1, 10_000)
+    const limiter = new WsCommandLimiter(1, 10_000, true)
     assert.equal(limiter.hit(client(), 0), true)
     assert.equal(limiter.hit(client(), 0), true)
   })
