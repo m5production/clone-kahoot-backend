@@ -148,7 +148,11 @@ export class ActiveGameService {
     this.clientMeta.delete(socket)
     if (!meta?.roomId) return
     const room = this.rooms.get(meta.roomId)
-    if (!room) return
+    if (room) this.detachFromRoom(socket, room)
+  }
+
+  /** removes the socket from the room and applies the disconnect side effects */
+  private detachFromRoom(socket: WebSocket, room: Room): void {
     const info = room.sockets.get(socket)
     room.sockets.delete(socket)
     if (!info) return
@@ -288,6 +292,13 @@ export class ActiveGameService {
     if (!room) throw new GameFault('NOT_FOUND', 'No such session or it has already ended')
     const user = await this.prisma.user.findUnique({ where: { id: meta.userId } })
     if (!user) throw new GameFault('NOT_FOUND', 'User was not found')
+
+    // the socket may still sit in another room — its membership is keyed by
+    // the socket, not by meta.roomId, so it has to leave explicitly
+    if (meta.roomId && meta.roomId !== sessionId) {
+      const previous = this.rooms.get(meta.roomId)
+      if (previous) this.detachFromRoom(socket, previous)
+    }
 
     // BR-56: the host cannot be a player in their own session — the role is
     // decided by the server, not claimed by the client
