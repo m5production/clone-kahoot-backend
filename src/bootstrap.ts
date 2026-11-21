@@ -21,11 +21,18 @@ export const createApp = async (): Promise<NestExpressApplication> => {
   app.setGlobalPrefix('api')
   app.useWebSocketAdapter(
     new WsAdapter(app, {
-      // protocol: client sends {type, payload}; adapter internally expects {event, data}
+      // protocol: client sends {type, payload}; adapter internally expects
+      // {event, data}. Returning undefined drops the frame silently — the
+      // gateway's own message listener already answers FAULT for these, and
+      // a throw here would only flood the error log with client garbage
       messageParser: (raw: { toString(): string }) => {
-        const message = JSON.parse(raw.toString())
-        if (typeof message?.type !== 'string') throw new Error('Invalid message format')
-        return { event: message.type, data: message.payload }
+        try {
+          const message = JSON.parse(raw.toString())
+          if (typeof message?.type !== 'string') return undefined
+          return { event: message.type, data: message.payload }
+        } catch {
+          return undefined
+        }
       },
     }),
   )
