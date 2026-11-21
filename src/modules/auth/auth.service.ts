@@ -1,5 +1,11 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common'
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  type OnModuleInit,
+  UnauthorizedException,
+} from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { User } from '@prisma/client'
 import type { AppConfig } from '../../config/configuration'
@@ -16,13 +22,22 @@ export const toPublicUser = ({ id, name }: User): PublicUser => ({ id, name })
 const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex')
 
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
+  private readonly logger = new Logger(AuthService.name)
   private readonly tickets = new Map<string, { userId: string; expiresAt: number }>()
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
   ) {}
+
+  /** expired sessions are never useful again — purge them on boot */
+  async onModuleInit(): Promise<void> {
+    const { count } = await this.prisma.session.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    })
+    if (count > 0) this.logger.log(`Purged ${count} expired session(s)`)
+  }
 
   async register(name: string, password: string): Promise<{ user: PublicUser; token: string }> {
     try {
@@ -73,7 +88,13 @@ export class AuthService {
   issueWsTicket(userId: string): string {
     const ticket = randomBytes(32).toString('base64url')
     const ttl = this.config.getOrThrow<AppConfig>('app').wsTicketTtlSeconds
-    this.tickets.set(ticket, { userId, expiresAt: Date.now() + ttl * 1000 })
+    const now = Date.now()
+    // tickets are deleted on consume — sweep leftovers so the map stays
+    // bounded by tickets that were actually requested recently
+    for (const [key, entry] of this.tickets) {
+      if (entry.expiresAt <= now) this.tickets.delete(key)
+    }
+    this.tickets.set(ticket, { userId, expiresAt: now + ttl * 1000 })
     return ticket
   }
 

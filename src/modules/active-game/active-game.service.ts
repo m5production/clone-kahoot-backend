@@ -114,6 +114,10 @@ interface Standing {
   correctCount: number
 }
 
+// ended rooms are remembered so the join page answers 410 instead of 404;
+// the map is insertion-ordered, evicting the oldest entries beyond the cap
+const MAX_ENDED_SESSIONS = 10_000
+
 export class GameFault extends Error {
   constructor(
     readonly code: string,
@@ -640,6 +644,9 @@ export class ActiveGameService {
     this.recordEnd(room, reason)
     this.rooms.delete(room.sessionId)
     this.endedSessions.set(room.sessionId, reason === 'finished' ? 'finished' : 'aborted')
+    if (this.endedSessions.size > MAX_ENDED_SESSIONS) {
+      this.endedSessions.delete(this.endedSessions.keys().next().value as string)
+    }
     this.broadcast(room, 'SESSION_ENDED', { reason })
     for (const socket of room.sockets.keys()) {
       const meta = this.clientMeta.get(socket)
