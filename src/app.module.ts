@@ -8,6 +8,7 @@ import { ActiveGameModule } from './modules/active-game/active-game.module'
 import { AuthModule } from './modules/auth/auth.module'
 import { GamesModule } from './modules/games/games.module'
 import { HealthModule } from './modules/health/health.module'
+import { HistoryModule } from './modules/history/history.module'
 import { QuestionsModule } from './modules/questions/questions.module'
 import { UsersModule } from './modules/users/users.module'
 
@@ -22,6 +23,7 @@ import { UsersModule } from './modules/users/users.module'
     AcceptedAnswersModule,
     ActiveGameModule,
     HealthModule,
+    HistoryModule,
   ],
 })
 export class AppModule implements NestModule {

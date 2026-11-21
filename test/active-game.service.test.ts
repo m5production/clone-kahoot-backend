@@ -475,3 +475,86 @@ test('standings: a full tie shares the place (BR-73)', async () => {
     Date.now = realNow
   }
 })
+
+test('the session records its history: start, each closed question, and the end (BR-80, NFR-R6)', async () => {
+  const calls: { method: string; input: any }[] = []
+  const historyStub = {
+    startRecord: async (input: any) => {
+      calls.push({ method: 'startRecord', input })
+      return input.questions.map((_: any, i: number) => `sq${i + 1}`)
+    },
+    recordQuestionClosed: async (input: any) => {
+      calls.push({ method: 'recordQuestionClosed', input })
+    },
+    finishRecord: async (input: any) => {
+      calls.push({ method: 'finishRecord', input })
+    },
+  }
+  const configStub = { get: () => ({ hostGraceSeconds: 300 }) }
+  const service = new ActiveGameService(prismaStub as any, configStub as any, historyStub as any)
+  const host = new FakeSocket()
+  const player = new FakeSocket()
+  service.registerClient(host as unknown as WebSocket, 'host-1')
+  service.registerClient(player as unknown as WebSocket, 'player-1')
+
+  const { sessionId } = await service.createSession('game-1', 'host-1')
+  assert.equal(calls[0].method, 'startRecord')
+  assert.equal(calls[0].input.sessionId, sessionId)
+  assert.deepEqual(
+    calls[0].input.questions.map((q: any) => [q.position, q.acceptedAnswers]),
+    [
+      [1, ['yes']],
+      [2, ['no']],
+    ],
+  )
+
+  await service.joinSession(host as unknown as WebSocket, sessionId)
+  await service.joinSession(player as unknown as WebSocket, sessionId)
+  service.startGame(host as unknown as WebSocket)
+  service.answerQuestion(player as unknown as WebSocket, 'q1', 'yes')
+
+  const closed = calls.find((c) => c.method === 'recordQuestionClosed')!
+  assert.equal(closed.input.sessionQuestionId, 'sq1')
+  assert.equal(closed.input.answers.length, 1)
+  assert.equal(closed.input.answers[0].isCorrect, true)
+  assert.equal(closed.input.players.length, 1)
+
+  service.showAnswers(host as unknown as WebSocket)
+  service.nextQuestion(host as unknown as WebSocket)
+  service.answerQuestion(player as unknown as WebSocket, 'q2', 'no')
+  service.showAnswers(host as unknown as WebSocket)
+  service.showWinners(host as unknown as WebSocket)
+
+  const finished = calls.find((c) => c.method === 'finishRecord')!
+  assert.equal(finished.input.status, 'finished')
+  assert.deepEqual(
+    finished.input.players.map((p: any) => [p.userId, p.place, p.correctCount]),
+    [['player-1', 1, 2]],
+  )
+})
+
+test('a host-ended session is recorded as aborted (BR-80)', async () => {
+  const calls: { method: string; input: any }[] = []
+  const historyStub = {
+    startRecord: async () => ['sq1', 'sq2'],
+    recordQuestionClosed: async (input: any) => {
+      calls.push({ method: 'recordQuestionClosed', input })
+    },
+    finishRecord: async (input: any) => {
+      calls.push({ method: 'finishRecord', input })
+    },
+  }
+  const service = new ActiveGameService(
+    prismaStub as any,
+    { get: () => ({ hostGraceSeconds: 300 }) } as any,
+    historyStub as any,
+  )
+  const host = new FakeSocket()
+  service.registerClient(host as unknown as WebSocket, 'host-1')
+  const { sessionId } = await service.createSession('game-1', 'host-1')
+  await service.joinSession(host as unknown as WebSocket, sessionId)
+  service.endSession(host as unknown as WebSocket)
+
+  const finished = calls.find((c) => c.method === 'finishRecord')!
+  assert.equal(finished.input.status, 'aborted')
+})

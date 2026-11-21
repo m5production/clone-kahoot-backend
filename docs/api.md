@@ -28,6 +28,9 @@
 | GET/POST/PUT/DELETE | `/accepted-answers(?questionId=)` | Bearer | ответы вопроса, `text` ≤ 100; POST/PUT — 1–10 штук без дублей после нормализации; PUT — транзакционная замена `[{text}]` |
 | POST | `/games/:id/sessions` | Bearer | только владелец; создать сеанс (лобби) → `{sessionId, joinPath}`; 409 с полем `sessionId` существующего сеанса, если он уже идёт |
 | GET | `/sessions/:id` | Bearer | публичное описание сеанса `{state, quizTitle, hostName}` для входа по ссылке; 410 — сеанс завершён |
+| GET | `/sessions(?gameId=)` | Bearer | история ведущего, новые сверху: `{id, gameId, quizTitle, status, startedAt, endedAt, playerCount, winner}`; `gameId` — фильтр по квизу (FR-80, FR-83) |
+| GET | `/sessions/:id/report` | Bearer | только ведущий сеанса: `{quizTitle, status, startedAt, endedAt, standings, questions[…,answers]}` — итог и разбор по вопросам (FR-81); чужой/живой сеанс → 404 |
+| DELETE | `/sessions/:id` | Bearer | только ведущий; удаляет запись истории → 204 (FR-82, BR-82); живой сеанс → 409 |
 | GET | `/health/live` `/health/ready` | публичный | probes |
 
 ## Ошибки

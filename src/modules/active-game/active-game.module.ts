@@ -1,11 +1,12 @@
 import { Module } from '@nestjs/common'
 import { AuthModule } from '../auth/auth.module'
+import { HistoryModule } from '../history/history.module'
 import { ActiveGameController } from './active-game.controller'
 import { ActiveGameGateway } from './active-game.gateway'
 import { ActiveGameService } from './active-game.service'
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, HistoryModule],
   controllers: [ActiveGameController],
   providers: [ActiveGameService, ActiveGameGateway],
   exports: [ActiveGameService],

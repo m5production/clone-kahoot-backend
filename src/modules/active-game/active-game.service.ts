@@ -13,6 +13,7 @@ import type { WebSocket } from 'ws'
 import { normalizeAnswer } from '../../common/normalize-answer'
 import type { AppConfig } from '../../config/configuration'
 import { PrismaService } from '../../database/prisma.service'
+import { HistoryService } from '../history/history.service'
 
 export const GAME_COLORS = ['red', 'orange', 'blue', 'green', 'purple', 'pink']
 
@@ -44,6 +45,8 @@ interface QuestionSnapshot {
   timeLimitSec: number
   acceptedTexts: string[]
   acceptedNormalized: Set<string>
+  /** id of the SessionQuestion history row this snapshot was saved as */
+  sessionQuestionId?: string
 }
 
 interface Room {
@@ -131,6 +134,7 @@ export class ActiveGameService {
   constructor(
     private readonly prisma: PrismaService,
     config?: ConfigService,
+    private readonly history?: HistoryService,
   ) {
     this.hostGraceMs = (config?.get<AppConfig>('app')?.hostGraceSeconds ?? 300) * 1000
   }
@@ -235,6 +239,28 @@ export class ActiveGameService {
       hostGraceTimer: null,
     }
     this.rooms.set(sessionId, room)
+    // BR-80: the history row and the question snapshot are written up front;
+    // a failed write must not stop the game, only leave the session unrecorded
+    try {
+      const questionIds = await this.history?.startRecord({
+        sessionId,
+        gameId,
+        hostId,
+        quizTitle: game.title,
+        questions: room.questions.map((q, index) => ({
+          position: index + 1,
+          text: q.text,
+          img: q.img,
+          timeLimitSec: q.timeLimitSec,
+          acceptedAnswers: q.acceptedTexts,
+        })),
+      })
+      questionIds?.forEach((id, index) => {
+        room.questions[index].sessionQuestionId = id
+      })
+    } catch (error) {
+      this.logger.error(`Failed to start a history record for ${sessionId}`, error)
+    }
     // the host must join over WS before the grace expires
     this.startHostGrace(room)
     return { sessionId, joinPath: `/join/${sessionId}` }
@@ -437,10 +463,78 @@ export class ActiveGameService {
     if (room.state !== 'question_open') return
     this.stopQuestionTimer(room)
     room.state = 'question_closed'
+    this.recordQuestionResults(room)
     this.broadcast(room, 'QUESTION_CLOSED', {
       questionId: room.questions[room.questionIndex].id,
     })
     this.broadcastSessionState(room)
+  }
+
+  /** NFR-R6: players' running totals and the closed question's answers go to history */
+  private recordQuestionResults(room: Room): void {
+    const question = room.questions[room.questionIndex]
+    if (!question.sessionQuestionId) return
+    void this.history
+      ?.recordQuestionClosed({
+        sessionId: room.sessionId,
+        sessionQuestionId: question.sessionQuestionId,
+        players: this.playerRecords(room),
+        answers: [...room.players.values()]
+          .map((player) => {
+            const answer = player.answers.find((a) => a.questionId === question.id)
+            return answer
+              ? {
+                  userId: player.id,
+                  text: answer.text,
+                  isCorrect: answer.isCorrect,
+                  responseTimeMs: answer.responseTimeMs,
+                  points: answer.points,
+                }
+              : null
+          })
+          .filter((a) => a !== null),
+      })
+      .catch((error) =>
+        this.logger.error(`Failed to record question results for ${room.sessionId}`, error),
+      )
+  }
+
+  private playerRecords(room: Room): {
+    userId: string
+    nickname: string
+    color: string
+    score: number
+    correctCount: number
+    correctTimeMs: number
+  }[] {
+    return [...room.players.values()].map((player) => {
+      const correct = player.answers.filter((a) => a.isCorrect)
+      return {
+        userId: player.id,
+        nickname: player.name,
+        color: player.bgColor,
+        score: player.answers.reduce((sum, a) => sum + a.points, 0),
+        correctCount: correct.length,
+        correctTimeMs: correct.reduce((sum, a) => sum + a.responseTimeMs, 0),
+      }
+    })
+  }
+
+  /** BR-80: when the session ends its status and the final places are saved */
+  private recordEnd(room: Room, reason: SessionEndReason): void {
+    const places = new Map(this.standings(room).map((s) => [s.id, s.place]))
+    void this.history
+      ?.finishRecord({
+        sessionId: room.sessionId,
+        status: reason === 'finished' ? 'finished' : 'aborted',
+        players: this.playerRecords(room).map((p) => ({
+          ...p,
+          place: places.get(p.userId) ?? 0,
+        })),
+      })
+      .catch((error) =>
+        this.logger.error(`Failed to finish the history record for ${room.sessionId}`, error),
+      )
   }
 
   private stopQuestionTimer(room: Room): void {
@@ -525,6 +619,7 @@ export class ActiveGameService {
   private endRoom(room: Room, reason: SessionEndReason): void {
     this.stopHostGrace(room)
     this.stopQuestionTimer(room)
+    this.recordEnd(room, reason)
     this.rooms.delete(room.sessionId)
     this.endedSessions.set(room.sessionId, reason === 'finished' ? 'finished' : 'aborted')
     this.broadcast(room, 'SESSION_ENDED', { reason })

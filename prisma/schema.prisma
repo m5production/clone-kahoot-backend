@@ -8,12 +8,14 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  name         String    @unique @db.VarChar(64)
-  passwordHash String
-  createdAt    DateTime  @default(now())
-  games        Game[]
-  sessions     Session[]
+  id             String          @id @default(cuid())
+  name           String          @unique @db.VarChar(64)
+  passwordHash   String
+  createdAt      DateTime        @default(now())
+  games          Game[]
+  sessions       Session[]
+  hostedSessions GameSession[]
+  sessionPlayers SessionPlayer[]
 }
 
 model Session {
@@ -30,13 +32,14 @@ model Session {
 }
 
 model Game {
-  id        String     @id @default(cuid())
+  id        String        @id @default(cuid())
   adminId   String
-  admin     User       @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  title     String     @db.VarChar(80)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  admin     User          @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  title     String        @db.VarChar(80)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
   questions Question[]
+  sessions  GameSession[]
 
   @@index([adminId])
 }
@@ -63,4 +66,69 @@ model AcceptedAnswer {
   text       String   @db.VarChar(100)
 
   @@index([questionId])
+}
+
+// History (stage 5): a finished or aborted live session. The quiz relation
+// survives its deletion (SetNull); the title and questions are stored as copies
+model GameSession {
+  id        String           @id
+  gameId    String?
+  game      Game?            @relation(fields: [gameId], references: [id], onDelete: SetNull)
+  hostId    String
+  host      User             @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  quizTitle String           @db.VarChar(80)
+  status    String           @default("running") @db.VarChar(16)
+  startedAt DateTime         @default(now())
+  endedAt   DateTime?
+  questions SessionQuestion[]
+  players   SessionPlayer[]
+
+  @@index([hostId])
+  @@index([gameId])
+}
+
+model SessionQuestion {
+  id              String          @id @default(cuid())
+  sessionId       String
+  session         GameSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  position        Int
+  text            String          @db.VarChar(300)
+  img             String?         @db.VarChar(2048)
+  timeLimitSec    Int             @db.SmallInt
+  acceptedAnswers Json
+  answers         SessionAnswer[]
+
+  @@index([sessionId])
+}
+
+model SessionPlayer {
+  id            String          @id @default(cuid())
+  sessionId     String
+  session       GameSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  nickname      String          @db.VarChar(64)
+  color         String          @db.VarChar(32)
+  score         Int             @default(0)
+  correctCount  Int             @default(0)
+  correctTimeMs Int             @default(0)
+  place         Int?
+  answers       SessionAnswer[]
+
+  @@unique([sessionId, userId])
+  @@index([sessionId])
+}
+
+model SessionAnswer {
+  id                String          @id @default(cuid())
+  sessionPlayerId   String
+  player            SessionPlayer   @relation(fields: [sessionPlayerId], references: [id], onDelete: Cascade)
+  sessionQuestionId String
+  question          SessionQuestion @relation(fields: [sessionQuestionId], references: [id], onDelete: Cascade)
+  text              String          @db.VarChar(100)
+  isCorrect         Boolean
+  responseTimeMs    Int
+  points            Int
+
+  @@unique([sessionPlayerId, sessionQuestionId])
 }
