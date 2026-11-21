@@ -54,7 +54,7 @@ const parseBody = <T extends object>(cls: new () => T, body: unknown): T => {
   return dto
 }
 
-@WebSocketGateway({ path: '/ws', maxPayload: 16384 })
+@WebSocketGateway({ path: '/ws' })
 export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private heartbeat?: NodeJS.Timeout
 
@@ -72,6 +72,9 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
   ) {}
 
   afterInit(server: WsServer): void {
+    // the decorator options are static, so the configured payload limit is
+    // applied here — ws reads it from server.options on every upgrade
+    server.options.maxPayload = this.config.getOrThrow<AppConfig>('app').wsPayloadLimit
     this.heartbeat = setInterval(() => {
       for (const client of server.clients as Set<WebSocket & { isAlive?: boolean }>) {
         if (client.isAlive === false) {
