@@ -1,4 +1,5 @@
 import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common'
+import { RateLimit } from '../../common/guards/rate-limit.guard'
 import { CurrentUser } from '../auth/current-user.decorator'
 import { AuthGuard } from '../auth/auth.guard'
 import type { PublicUser } from '../auth/auth.service'
@@ -11,6 +12,7 @@ export class ActiveGameController {
 
   // FR-60: launching a quiz creates a session and opens its lobby
   @Post('games/:id/sessions')
+  @UseGuards(RateLimit(30, 60))
   createSession(
     @Param('id') gameId: string,
     @CurrentUser() user: PublicUser,

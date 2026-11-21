@@ -49,8 +49,8 @@ export const createApp = async (): Promise<NestExpressApplication> => {
   )
   app.useGlobalFilters(new HttpExceptionFilter())
 
-  // Interactive OpenAPI docs are a development tool; in production only the JSON
-  // schema is served at /api/openapi.json
+  // OpenAPI docs and the JSON schema are development tools — exposing the full
+  // route/DTO map in production only eases reconnaissance, so neither is served
   const document = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
@@ -62,13 +62,13 @@ export const createApp = async (): Promise<NestExpressApplication> => {
   )
   if (appConfig.nodeEnv !== 'production') {
     SwaggerModule.setup('api/docs', app, document)
+    app
+      .getHttpAdapter()
+      .getInstance()
+      .get('/api/openapi.json', (_req: unknown, res: { json(body: unknown): void }) =>
+        res.json(document),
+      )
   }
-  app
-    .getHttpAdapter()
-    .getInstance()
-    .get('/api/openapi.json', (_req: unknown, res: { json(body: unknown): void }) =>
-      res.json(document),
-    )
 
   app.enableShutdownHooks()
   return app

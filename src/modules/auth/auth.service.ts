@@ -22,6 +22,10 @@ export const toPublicUser = ({ id, name }: User): PublicUser => ({ id, name })
 
 const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex')
 
+// used to run the same scrypt work when the login name does not exist — a
+// fast reject would reveal which usernames are registered
+const DUMMY_PASSWORD_HASH = `scrypt:${'0'.repeat(32)}:${'0'.repeat(128)}`
+
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name)
@@ -56,7 +60,8 @@ export class AuthService implements OnModuleInit {
 
   async login(name: string, password: string): Promise<{ user: PublicUser; token: string }> {
     const user = await this.prisma.user.findUnique({ where: { name } })
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    const valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH)
+    if (!user || !valid) {
       throw new UnauthorizedException('Invalid name or password')
     }
     return { user: toPublicUser(user), token: await this.createSession(user.id) }

@@ -68,6 +68,11 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
   // a normal game issues a handful per question, floods are rejected
   private readonly commandLimiter: WsCommandLimiter
 
+  // one user may hold at most this many live sockets; a real client needs
+  // two at most (host + player tabs) plus reconnect overlap
+  private readonly maxSocketsPerUser: number
+  private readonly socketCounts = new Map<string, number>()
+
   @WebSocketServer()
   server!: WsServer
 
@@ -79,6 +84,7 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
     // E2E/test environments flood the socket legitimately
     const enabled = config.getOrThrow<AppConfig>('app').nodeEnv !== 'test'
     this.commandLimiter = new WsCommandLimiter(30, 10_000, enabled)
+    this.maxSocketsPerUser = enabled ? 10 : Number.POSITIVE_INFINITY
   }
 
   afterInit(server: WsServer): void {
@@ -115,6 +121,17 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
       client.close(4401, 'Invalid or expired ticket')
       return
     }
+    const concurrent = this.socketCounts.get(userId) ?? 0
+    if (concurrent >= this.maxSocketsPerUser) {
+      client.close(4429, 'Too many connections')
+      return
+    }
+    this.socketCounts.set(userId, concurrent + 1)
+    client.once('close', () => {
+      const left = (this.socketCounts.get(userId) ?? 1) - 1
+      if (left <= 0) this.socketCounts.delete(userId)
+      else this.socketCounts.set(userId, left)
+    })
     client.isAlive = true
     client.on('pong', () => {
       client.isAlive = true

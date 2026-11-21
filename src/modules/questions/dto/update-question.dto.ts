@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer'
-import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator'
 import { trimString } from '../../../common/transforms'
 import { QUESTION_TYPES, type QuestionType, TIME_LIMITS_SEC } from '../question.constants'
 
@@ -10,8 +10,12 @@ export class UpdateQuestionDto {
   @MaxLength(300)
   text!: string
 
+  // the value reaches <img src> on every player's screen — allow only http(s)
+  // URLs and inline images so file:/javascript:/tracking schemes cannot be
+  // smuggled in (data: images do not issue requests and cannot run scripts)
   @IsOptional()
   @IsString()
+  @Matches(/^(https?:\/\/|data:image\/)/i)
   @MaxLength(2048)
   img?: string | null
 

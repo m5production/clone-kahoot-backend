@@ -43,9 +43,15 @@ export class UsersController {
     return this.auth.register(dto.name, dto.password).then(toAuthResponse)
   }
 
+  // the second bucket keys on the login name — unlike req.ip, a brute-forcing
+  // client cannot rotate it through X-Forwarded-For
   @Post('auth')
   @HttpCode(200)
-  @UseGuards(RateLimit(10, 60))
+  @UseGuards(
+    RateLimit(10, 60, (req) =>
+      typeof req.body?.name === 'string' ? `name:${req.body.name.toLowerCase()}` : undefined,
+    ),
+  )
   login(@Body() dto: CredentialsDto): Promise<AuthResponse> {
     return this.auth.login(dto.name, dto.password).then(toAuthResponse)
   }
@@ -65,6 +71,7 @@ export class UsersController {
   }
 
   @Get(':id')
+  @UseGuards(AuthGuard)
   async getById(@Param('id') id: string): Promise<PublicUser> {
     const user = await this.users.findPublic(id)
     if (!user) throw new NotFoundException('User was not found')
