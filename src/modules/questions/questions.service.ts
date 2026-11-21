@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common'
 import type { Question } from '@prisma/client'
+import { isUniqueViolation } from '../../common/prisma-error'
 import { PrismaService } from '../../database/prisma.service'
 import { ActiveGameService } from '../active-game/active-game.service'
 import { GamesService } from '../games/games.service'
@@ -73,7 +74,7 @@ export class QuestionsService {
       await this.games.touch(dto.gameId)
       return withAnswersCount(question)
     } catch (error) {
-      if ((error as { code?: string }).code === 'P2002') {
+      if (isUniqueViolation(error)) {
         throw new BadRequestException('Question order conflict, retry')
       }
       throw error

@@ -1,10 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
+import { hasPrismaCode, isUniqueViolation } from '../../common/prisma-error'
 import { PrismaService } from '../../database/prisma.service'
 import { AuthService, type PublicUser, toPublicUser } from '../auth/auth.service'
 import { hashPassword } from '../auth/password.util'
-
-const isUniqueViolation = (error: unknown): boolean =>
-  typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002'
 
 @Injectable()
 export class UsersService {
@@ -32,7 +30,7 @@ export class UsersService {
       if (isUniqueViolation(error)) {
         throw new ConflictException('There is a user with such a name. Please make a unique name')
       }
-      if ((error as { code?: string }).code === 'P2025') {
+      if (hasPrismaCode(error, 'P2025')) {
         throw new NotFoundException('User was not found')
       }
       throw error

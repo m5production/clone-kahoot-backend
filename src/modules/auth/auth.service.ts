@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { User } from '@prisma/client'
+import { isUniqueViolation } from '../../common/prisma-error'
 import type { AppConfig } from '../../config/configuration'
 import { PrismaService } from '../../database/prisma.service'
 import { hashPassword, verifyPassword } from './password.util'
@@ -46,7 +47,7 @@ export class AuthService implements OnModuleInit {
       })
       return { user: toPublicUser(user), token: await this.createSession(user.id) }
     } catch (error) {
-      if (this.isUniqueViolation(error)) {
+      if (isUniqueViolation(error)) {
         throw new ConflictException('There is a user with such a name. Please make a unique name')
       }
       throw error
@@ -118,11 +119,5 @@ export class AuthService implements OnModuleInit {
         },
       })
       .then(() => token)
-  }
-
-  private isUniqueViolation(error: unknown): boolean {
-    return (
-      typeof error === 'object' && error !== null && (error as { code?: string }).code === 'P2002'
-    )
   }
 }
