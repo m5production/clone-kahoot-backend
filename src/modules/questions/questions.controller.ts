@@ -1,4 +1,15 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common'
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UseGuards,
+} from '@nestjs/common'
 import type { Question } from '@prisma/client'
 import { Transform } from 'class-transformer'
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator'
@@ -8,6 +19,11 @@ import type { PublicUser } from '../auth/auth.service'
 import { QuestionsService, type QuestionWithAnswersCount } from './questions.service'
 
 const TIME_LIMITS_SEC = [10, 20, 30, 60, 90, 120]
+
+const requireGameId = (gameId?: string): string => {
+  if (!gameId) throw new BadRequestException('Game id has not been provided')
+  return gameId
+}
 
 class CreateQuestionDto {
   @IsString()
@@ -60,7 +76,7 @@ export class QuestionsController {
     @Query('gameId') gameId: string,
     @CurrentUser() user: PublicUser,
   ): Promise<QuestionWithAnswersCount[]> {
-    return this.questions.listForGame(gameId, user.id)
+    return this.questions.listForGame(requireGameId(gameId), user.id)
   }
 
   @Get(':id')
