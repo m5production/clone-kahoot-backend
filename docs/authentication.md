@@ -44,8 +44,9 @@ JavaScript'ом → при XSS его можно украсть. Поэтому:
   `playerId` в теле игнорируются).
 - Владение ресурсами: `game.adminId === session.userId` для всех операций с
   игрой, вопросами и ответами; `users/:id` — только свои.
-- WS: `START_GAME`/`CHANGE_QUESTION`/`SHOW_ANSWERS`/`SHOW_WINNERS`/`END_GAME` —
-  только ведущий комнаты; `ANSWER_QUESTION` — только игрок, только активный
-  вопрос, один раз.
+- WS: `START_GAME`/`NEXT_QUESTION`/`CLOSE_QUESTION`/`SHOW_ANSWERS`/
+  `SHOW_WINNERS`/`END_SESSION` — только ведущий сеанса; `ANSWER_QUESTION` —
+  только игрок, только активный вопрос, один раз (см.
+  [websocket-protocol.md](websocket-protocol.md)).
 - Rate limit (in-memory, per IP+path): вход и регистрация; при `NODE_ENV=test` —
   отключён.

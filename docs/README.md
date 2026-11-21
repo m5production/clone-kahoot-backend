@@ -19,5 +19,7 @@
 - [modules/games.md](modules/games.md) — квизы пользователя.
 - [modules/questions.md](modules/questions.md) — вопросы квиза.
 - [modules/accepted-answers.md](modules/accepted-answers.md) — принимаемые ответы.
-- [modules/active-game.md](modules/active-game.md) — живые комнаты и WebSocket.
+- [modules/options.md](modules/options.md) — варианты ответов choice-вопросов.
+- [modules/active-game.md](modules/active-game.md) — живые сеансы и WebSocket.
+- [modules/history.md](modules/history.md) — запись и чтение истории игр.
 - [modules/health.md](modules/health.md) — liveness/readiness.

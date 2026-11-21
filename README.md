@@ -8,7 +8,7 @@ PostgreSQL + Prisma. Подробности — [docs/](docs/README.md).
 ```bash
 yarn install --frozen-lockfile
 yarn db:up                # PostgreSQL через docker compose (:5432)
-yarn prisma-migrate-dev
+npx dotenvx run -f .env.development -- node scripts/prisma-env.mjs migrate deploy
 yarn dev                  # http://localhost:3000/api
 ```
 

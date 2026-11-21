@@ -20,7 +20,11 @@
 
 ## Зависимости
 
-`PrismaService`, `AuthGuard`. Владение — через `question.game.adminId`.
+`PrismaService`, `AuthGuard`, `GamesService`, `ActiveGameService`. Владение —
+через `question.game.adminId`; изменения отклоняются 409, пока по квизу идёт
+сеанс (`assertQuizEditable`, BR-54).
+
+Варианты `choice`-вопросов — отдельный модуль [options.md](options.md).
 
 ## Транзакции
 

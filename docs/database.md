@@ -8,7 +8,8 @@ PostgreSQL + Prisma. Схема: `prisma/schema.prisma`, миграции: `pris
 User ─┬─< Session        (сессии: хеш токена, expiresAt, revokedAt)
 User ─┬─< GameSession ─┬─< SessionQuestion ─┬─< SessionAnswer
       │                └─< SessionPlayer ────┘   (история игр: копии названия и вопросов; Game → SetNull при удалении квиза)
-      └─< Game ──< Question ──< AcceptedAnswer
+      └─< Game ──< Question ─┬─< AcceptedAnswer
+                            └─< QuestionOption    (варианты choice-вопросов)
 ```
 
 - `User`: `id`, `name` (unique + функциональный unique `lower(name)` — регистронезависимо,
@@ -18,9 +19,15 @@ User ─┬─< GameSession ─┬─< SessionQuestion ─┬─< SessionAnswer
 - `Game`: `id`, `adminId` → `User` cascade, `title` (`VarChar(80)`, обязательное —
   существующие строки добиты «Quiz #N»), `createdAt`, `updatedAt` (`@updatedAt`;
   сервис трогает его и при изменениях вопросов/ответов — BR-45).
-- `Question`: `id`, `gameId` → cascade, `order`, `text` (`VarChar(300)`), `img`, `timeLimitSec` (`SmallInt`, CHECK ∈ {10,20,30,60,90,120}, default 20)
-  (nullable); unique `(gameId, order)`. Пустой `text` допускается — редактор
+- `Question`: `id`, `gameId` → cascade, `order`, `type` (`VarChar(16)`:
+  `open` | `choice`, default `open` — D-10), `text` (`VarChar(300)`), `img`,
+  `timeLimitSec` (`SmallInt`, CHECK ∈ {10,20,30,60,90,120}, default 20);
+  unique `(gameId, order)`. Пустой `text` допускается — редактор
   создаёт вопрос-плейсхолдер (миграция `20261119123000`).
+- `QuestionOption`: `id`, `questionId` → cascade, `order`, `text`
+  (`VarChar(100)`), `isCorrect` (default false); unique `(questionId, order)`.
+  2–4 варианта на `choice`-вопрос, ровно один верный — проверка в сервисе
+  (BR-86).
 - `AcceptedAnswer`: `id`, `questionId` → cascade, `text` (`VarChar(100)`,
   CHECK непустой).
 
@@ -46,6 +53,6 @@ User ─┬─< GameSession ─┬─< SessionQuestion ─┬─< SessionAnswer
 ## История игр (этап 5)
 
 - `GameSession`: `id` (= sessionId сеанса), `gameId` → `Game` SetNull (удаление квиза не трогает историю), `hostId` → `User` cascade, `quizTitle` (копия на момент игры), `status` (`running`/`finished`/`aborted`; при старте процесса `running` → `aborted` — NFR-R7), `startedAt`, `endedAt`.
-- `SessionQuestion`: полный снапшот вопроса на момент игры — `position`, `text`, `img`, `timeLimitSec`, `acceptedAnswers` (JSON-массив).
+- `SessionQuestion`: полный снапшот вопроса на момент игры — `position`, `text`, `img`, `timeLimitSec`, `type` (`open`/`choice`), `acceptedAnswers` (JSON-массив), `options` (JSON `[{text, isCorrect}]` для `choice`).
 - `SessionPlayer`: `userId` → `User` cascade, `nickname`, `color`, итоговые `score`, `correctCount`, `correctTimeMs`, `place` (записывается при завершении).
 - `SessionAnswer`: ответ игрока на вопрос — `text`, `isCorrect`, `responseTimeMs`, `points`; пишется при закрытии каждого вопроса (NFR-R6).
