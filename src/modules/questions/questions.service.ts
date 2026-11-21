@@ -91,7 +91,8 @@ export class QuestionsService {
       where: { id },
       data: {
         text: dto.text,
-        img: dto.img ?? question.img,
+        // absent field keeps the stored value; explicit null clears it
+        img: dto.img === undefined ? question.img : dto.img,
         timeLimitSec: dto.timeLimitSec ?? question.timeLimitSec,
       },
       include: answersCountInclude,
