@@ -30,19 +30,24 @@ export class AcceptedAnswersService {
   async create(questionId: string, userId: string, texts: string[]): Promise<AcceptedAnswer[]> {
     const question = await this.getOwnedQuestion(questionId, userId)
     this.activeGame.assertQuizEditable(question.gameId)
-    const existing = await this.prisma.acceptedAnswer.findMany({
-      where: { questionId },
-      select: { text: true },
+    // the question row lock serializes concurrent creates so the
+    // check-then-insert below cannot race past the count/duplicate limits
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Question" WHERE id = ${questionId} FOR UPDATE`
+      const existing = await tx.acceptedAnswer.findMany({
+        where: { questionId },
+        select: { text: true },
+      })
+      assertValidAnswerTexts(
+        existing.map(({ text }) => text),
+        texts,
+      )
+      const created = await tx.acceptedAnswer.createManyAndReturn({
+        data: texts.map((text) => ({ questionId, text })),
+      })
+      await tx.game.update({ where: { id: question.gameId }, data: { updatedAt: new Date() } })
+      return created
     })
-    assertValidAnswerTexts(
-      existing.map(({ text }) => text),
-      texts,
-    )
-    const created = await this.prisma.acceptedAnswer.createManyAndReturn({
-      data: texts.map((text) => ({ questionId, text })),
-    })
-    await this.games.touch(question.gameId)
-    return created
   }
 
   async replace(questionId: string, userId: string, texts: string[]): Promise<AcceptedAnswer[]> {
