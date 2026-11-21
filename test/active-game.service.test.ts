@@ -61,8 +61,13 @@ const prismaStub = {
 const defaultQuestionFindMany = prismaStub.question.findMany
 
 const setup = (hostGraceSeconds = 300) => {
-  const configStub = { get: () => ({ hostGraceSeconds }) }
-  const service = new ActiveGameService(prismaStub as any, configStub as any)
+  const configStub = { getOrThrow: () => ({ hostGraceSeconds }) }
+  const historyStub = {
+    startRecord: async () => [] as string[],
+    recordQuestionClosed: async () => {},
+    finishRecord: async () => {},
+  }
+  const service = new ActiveGameService(prismaStub as any, configStub as any, historyStub as any)
   const host = new FakeSocket()
   const player = new FakeSocket()
   service.registerClient(host as unknown as WebSocket, 'host-1')
@@ -490,7 +495,7 @@ test('the session records its history: start, each closed question, and the end 
       calls.push({ method: 'finishRecord', input })
     },
   }
-  const configStub = { get: () => ({ hostGraceSeconds: 300 }) }
+  const configStub = { getOrThrow: () => ({ hostGraceSeconds: 300 }) }
   const service = new ActiveGameService(prismaStub as any, configStub as any, historyStub as any)
   const host = new FakeSocket()
   const player = new FakeSocket()
@@ -546,7 +551,7 @@ test('a host-ended session is recorded as aborted (BR-80)', async () => {
   }
   const service = new ActiveGameService(
     prismaStub as any,
-    { get: () => ({ hostGraceSeconds: 300 }) } as any,
+    { getOrThrow: () => ({ hostGraceSeconds: 300 }) } as any,
     historyStub as any,
   )
   const host = new FakeSocket()

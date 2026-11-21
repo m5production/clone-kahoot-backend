@@ -137,10 +137,10 @@ export class ActiveGameService {
 
   constructor(
     private readonly prisma: PrismaService,
-    config?: ConfigService,
-    private readonly history?: HistoryService,
+    config: ConfigService,
+    private readonly history: HistoryService,
   ) {
-    this.hostGraceMs = (config?.get<AppConfig>('app')?.hostGraceSeconds ?? 300) * 1000
+    this.hostGraceMs = config.getOrThrow<AppConfig>('app').hostGraceSeconds * 1000
   }
 
   registerClient(socket: WebSocket, userId: string): void {
@@ -243,7 +243,7 @@ export class ActiveGameService {
     // BR-80: the history row and the question snapshot are written up front;
     // a failed write must not stop the game, only leave the session unrecorded
     try {
-      const questionIds = await this.history?.startRecord({
+      const questionIds = await this.history.startRecord({
         sessionId,
         gameId,
         hostId,
@@ -256,7 +256,7 @@ export class ActiveGameService {
           acceptedAnswers: q.acceptedTexts,
         })),
       })
-      questionIds?.forEach((id, index) => {
+      questionIds.forEach((id, index) => {
         room.questions[index].sessionQuestionId = id
       })
     } catch (error) {
@@ -497,7 +497,7 @@ export class ActiveGameService {
     const question = room.questions[room.questionIndex]
     if (!question.sessionQuestionId) return
     void this.history
-      ?.recordQuestionClosed({
+      .recordQuestionClosed({
         sessionId: room.sessionId,
         sessionQuestionId: question.sessionQuestionId,
         players: this.playerRecords(room),
@@ -546,7 +546,7 @@ export class ActiveGameService {
   private recordEnd(room: Room, reason: SessionEndReason): void {
     const places = new Map(this.standings(room).map((s) => [s.id, s.place]))
     void this.history
-      ?.finishRecord({
+      .finishRecord({
         sessionId: room.sessionId,
         status: reason === 'finished' ? 'finished' : 'aborted',
         players: this.playerRecords(room).map((p) => ({
