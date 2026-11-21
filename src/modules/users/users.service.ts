@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common'
 import { PrismaService } from '../../database/prisma.service'
-import { type PublicUser, toPublicUser } from '../auth/auth.service'
+import { AuthService, type PublicUser, toPublicUser } from '../auth/auth.service'
 import { hashPassword } from '../auth/password.util'
 
 const isUniqueViolation = (error: unknown): boolean =>
@@ -8,7 +8,10 @@ const isUniqueViolation = (error: unknown): boolean =>
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly auth: AuthService,
+  ) {}
 
   async findPublic(id: string): Promise<PublicUser | null> {
     const user = await this.prisma.user.findUnique({ where: { id } })
@@ -21,6 +24,9 @@ export class UsersService {
         where: { id },
         data: { name, passwordHash: await hashPassword(password) },
       })
+      // a credentials update invalidates every existing session, including
+      // the caller's — the client has to sign in again
+      await this.auth.revokeAllUserSessions(id)
       return toPublicUser(user)
     } catch (error) {
       if (isUniqueViolation(error)) {
