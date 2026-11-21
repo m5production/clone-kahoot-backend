@@ -99,9 +99,9 @@
 ## 8. Ошибки, эксплуатация и CI
 
 - [x] Настроить единые HTTP- и WebSocket-ошибки — {code,message,requestId} и FAULT {code,message}.
-- [ ] Настроить структурированные логи и request ID без секретов — requestId middleware и заголовок есть; полное структурированное логирование запросов не настроено.
+- [x] Настроить структурированные логи и request ID без секретов — requestId middleware, заголовок `x-request-id` и JSON-строка на запрос (метод, путь, статус, длительность) в `RequestLogMiddleware`; тела и заголовки не логируются.
 - [x] Добавить защитные заголовки и лимиты payload — helmet, JSON body limit, WS maxPayload.
-- [ ] Ограничить частоту входа и игровых команд — вход/регистрация ограничены (in-memory, отключается при NODE_ENV=test для e2e); игровые WS-команды нет.
+- [x] Ограничить частоту входа и игровых команд — вход/регистрация ограничены `RateLimit` guard; игровые WS-команды — `WsCommandLimiter` (30 команд/10 с на соединение, `FAULT RATE_LIMITED`, отключается при NODE_ENV=test).
 - [ ] Настроить reverse proxy, liveness и readiness — trust proxy, /api/health/live, /api/health/ready; проверка на площадке не выполнена.
 - [x] Реализовать ограниченное по времени завершение HTTP, WS и Prisma — enableShutdownHooks + SIGTERM/SIGINT с таймаутом 10s.
 - [x] Обновить Docker-сборку без production-секретов в образе — .env* исключены из образа.

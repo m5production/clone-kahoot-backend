@@ -13,6 +13,7 @@ import {
 import { plainToInstance } from 'class-transformer'
 import { IsNotEmpty, IsString, MaxLength, validateSync } from 'class-validator'
 import type { WebSocket, WebSocketServer as WsServer } from 'ws'
+import { WsCommandLimiter } from '../../common/ws-command-limiter'
 import type { AppConfig } from '../../config/configuration'
 import { AuthService } from '../auth/auth.service'
 import { ActiveGameService, GameFault } from './active-game.service'
@@ -56,6 +57,10 @@ const parseBody = <T extends object>(cls: new () => T, body: unknown): T => {
 @WebSocketGateway({ path: '/ws', maxPayload: 16384 })
 export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   private heartbeat?: NodeJS.Timeout
+
+  // BR-adjacent hardening: a socket may send at most 30 commands per 10 s —
+  // a normal game issues a handful per question, floods are rejected
+  private readonly commandLimiter = new WsCommandLimiter(30, 10_000)
 
   @WebSocketServer()
   server!: WsServer
@@ -105,10 +110,17 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
       try {
         const message = JSON.parse(raw.toString())
         if (typeof message?.type !== 'string' || !KNOWN_EVENTS.has(message.type)) {
-          this.activeGame.sendFault(client, new GameFault('UNKNOWN_EVENT', 'Unknown event type'))
+          // unknown/invalid frames never reach run() — they need their own limit
+          const fault = this.commandLimiter.hit(client)
+            ? new GameFault('UNKNOWN_EVENT', 'Unknown event type')
+            : new GameFault('RATE_LIMITED', 'Too many commands, slow down')
+          this.activeGame.sendFault(client, fault)
         }
       } catch {
-        this.activeGame.sendFault(client, new GameFault('BAD_REQUEST', 'Invalid JSON message'))
+        const fault = this.commandLimiter.hit(client)
+          ? new GameFault('BAD_REQUEST', 'Invalid JSON message')
+          : new GameFault('RATE_LIMITED', 'Too many commands, slow down')
+        this.activeGame.sendFault(client, fault)
       }
     })
     this.activeGame.registerClient(client, userId)
@@ -164,6 +176,13 @@ export class ActiveGameGateway implements OnGatewayInit, OnGatewayConnection, On
   }
 
   private run(client: WebSocket, fn: () => unknown): void {
+    if (!this.commandLimiter.hit(client)) {
+      this.activeGame.sendFault(
+        client,
+        new GameFault('RATE_LIMITED', 'Too many commands, slow down'),
+      )
+      return
+    }
     Promise.resolve()
       .then(fn)
       .catch((error) => this.activeGame.sendFault(client, error))

@@ -40,7 +40,8 @@ Heartbeat: серверный ping каждые 30 с; без pong — terminate
 `BAD_REQUEST` (битый JSON/невалидный payload/действие не в том состоянии/пустой
 ответ), `UNKNOWN_EVENT`, `UNAUTHORIZED` (нет тикета), `FORBIDDEN` (не та роль),
 `NOT_FOUND` (нет такого сеанса или он завершён), `NOT_RUNNING` (не в сеансе),
-`CONFLICT` (повторный ответ), `INTERNAL_ERROR`.
+`CONFLICT` (повторный ответ), `RATE_LIMITED` (больше 30 команд за 10 с с одного
+соединения; в `NODE_ENV=test` лимит отключён), `INTERNAL_ERROR`.
 
 ## Жизненный цикл
 

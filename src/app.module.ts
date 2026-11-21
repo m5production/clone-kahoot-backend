@@ -1,6 +1,7 @@
 import { type MiddlewareConsumer, Module, type NestModule } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { RequestIdMiddleware } from './common/middleware/request-id.middleware'
+import { RequestLogMiddleware } from './common/middleware/request-log.middleware'
 import { appConfig } from './config/configuration'
 import { PrismaModule } from './database/prisma.module'
 import { AcceptedAnswersModule } from './modules/accepted-answers/accepted-answers.module'
@@ -28,6 +29,6 @@ import { UsersModule } from './modules/users/users.module'
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestIdMiddleware).forRoutes('{*path}')
+    consumer.apply(RequestIdMiddleware, RequestLogMiddleware).forRoutes('{*path}')
   }
 }
