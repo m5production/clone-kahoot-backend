@@ -1,5 +1,5 @@
 {
-  "name": "clone-kahoot-backend",
+  "name": "piggies-quiz-backend",
   "packageManager": "yarn@1.22.22",
   "version": "1.0.0",
   "main": "dist/main.js",

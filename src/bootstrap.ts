@@ -54,7 +54,7 @@ export const createApp = async (): Promise<NestExpressApplication> => {
   const document = SwaggerModule.createDocument(
     app,
     new DocumentBuilder()
-      .setTitle('clone-kahoot backend')
+      .setTitle('piggies quiz backend')
       .setDescription('Quiz backend: REST API under /api, game WebSocket at /ws')
       .setVersion('1.0')
       .addBearerAuth()

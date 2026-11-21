@@ -1,4 +1,4 @@
-# clone-kahoot backend
+# piggies quiz backend
 
 Модульный монолит на NestJS: REST API (`/api`), игровой WebSocket (`/ws`),
 PostgreSQL + Prisma. Подробности — [docs/](docs/README.md).
