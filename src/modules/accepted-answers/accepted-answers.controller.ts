@@ -11,19 +11,11 @@ import {
   UseGuards,
 } from '@nestjs/common'
 import type { AcceptedAnswer } from '@prisma/client'
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator'
-import { CurrentUser } from '../auth/current-user.decorator'
 import { AuthGuard } from '../auth/auth.guard'
 import type { PublicUser } from '../auth/auth.service'
+import { CurrentUser } from '../auth/current-user.decorator'
 import { AcceptedAnswersService } from './accepted-answers.service'
-
-class AnswerItemDto {
-  // BR-47: 1-100 chars per answer; the service also rejects blanks and duplicates
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(100)
-  text!: string
-}
+import { AnswerItemDto } from './dto/answer-item.dto'
 
 const requireQuestionId = (questionId?: string): string => {
   if (!questionId) throw new BadRequestException('Question id has not been provided')

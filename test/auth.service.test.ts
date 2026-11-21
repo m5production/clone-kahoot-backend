@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { ConflictException, UnauthorizedException } from '@nestjs/common'
 import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'
-import { CredentialsDto } from '../src/modules/auth/auth.controller'
+import { CredentialsDto } from '../src/modules/auth/dto/credentials.dto'
 import { AuthService } from '../src/modules/auth/auth.service'
 import { hashPassword } from '../src/modules/auth/password.util'
 

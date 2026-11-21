@@ -1,26 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common'
 import type { Game } from '@prisma/client'
-import { Transform } from 'class-transformer'
-import { ArrayMinSize, IsArray, IsString, Length } from 'class-validator'
-import { CurrentUser } from '../auth/current-user.decorator'
 import { AuthGuard } from '../auth/auth.guard'
 import type { PublicUser } from '../auth/auth.service'
+import { CurrentUser } from '../auth/current-user.decorator'
+import { GameTitleDto } from './dto/game-title.dto'
+import { ReorderQuestionsDto } from './dto/reorder-questions.dto'
 import { GamesService, type GameSummary } from './games.service'
-
-class GameTitleDto {
-  // BR-44: title is required, 1-80 chars, trimmed
-  @Transform(({ value }: { value: unknown }) => (typeof value === 'string' ? value.trim() : value))
-  @IsString()
-  @Length(1, 80)
-  title!: string
-}
-
-class ReorderQuestionsDto {
-  @IsArray()
-  @ArrayMinSize(1)
-  @IsString({ each: true })
-  questionIds!: string[]
-}
 
 @Controller('games')
 @UseGuards(AuthGuard)
